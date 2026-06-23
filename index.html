@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BTR 승강기 침수 안전 경보</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:#0a0f1e;color:#e2e8f0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
+.topbar{background:linear-gradient(90deg,#0a0f1e,#0d1b2e);border-bottom:1px solid #1e3a5f;padding:0 16px;height:52px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;z-index:1000}
+.topbar-logo{font-size:1rem;font-weight:700;color:#60a5fa;display:flex;align-items:center;gap:8px}
+.topbar-sub{font-size:.7rem;color:#475569;margin-top:1px}
+.status-row{display:flex;align-items:center;gap:10px}
+.sdot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e}
+.sdot.loading{background:#fbbf24;box-shadow:0 0 6px #fbbf24;animation:blink 1s infinite}
+.sdot.error{background:#ef4444;box-shadow:0 0 6px #ef4444}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.stxt{font-size:.75rem;color:#94a3b8}
+.lupd{font-size:.72rem;color:#475569}
+.refresh-btn{background:none;border:1px solid #1e3a5f;color:#64748b;padding:5px 12px;border-radius:6px;font-size:.73rem;cursor:pointer;transition:.15s}
+.refresh-btn:hover{border-color:#3b82f6;color:#60a5fa}
+.alert-banner{display:none;padding:8px 16px;font-size:.82rem;font-weight:600;text-align:center;flex-shrink:0}
+.alert-banner.watch{background:rgba(234,179,8,.12);border-bottom:1px solid rgba(234,179,8,.3);color:#fbbf24}
+.alert-banner.danger{background:rgba(239,68,68,.12);border-bottom:1px solid rgba(239,68,68,.4);color:#f87171;animation:flash 1.5s infinite}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.6}}
+.layout{display:flex;flex:1;overflow:hidden}
+.sidebar{width:300px;background:#0d1b2e;border-right:1px solid #1e3a5f;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.sb-hdr{padding:10px 14px;border-bottom:1px solid #1e3a5f;font-size:.72rem;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase}
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#1e3a5f;flex-shrink:0}
+.stat-box{background:#0d1b2e;padding:12px 14px;text-align:center}
+.sv{font-size:1.5rem;font-weight:800;line-height:1.1}
+.sl{font-size:.67rem;color:#64748b;margin-top:2px}
+.sv.total{color:#60a5fa}.sv.safe{color:#22c55e}.sv.watch{color:#fbbf24}.sv.danger{color:#ef4444}
+.rain-panel{padding:12px 14px;border-bottom:1px solid #1e3a5f;flex-shrink:0}
+.rain-panel h3{font-size:.7rem;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.rain-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;background:#0a0f1e;border:1px solid #1e3a5f;margin-bottom:5px;cursor:pointer;transition:.15s}
+.rain-item:hover{border-color:#3b82f6}
+.city-name{font-size:.8rem;color:#cbd5e1;font-weight:500}
+.rain-val{font-size:.82rem;font-weight:700}
+.r0{color:#475569}.r1{color:#93c5fd}.r2{color:#fbbf24}.r3{color:#f87171}
+.rain-bar{height:3px;background:#1e293b;border-radius:2px;margin-top:4px;overflow:hidden}
+.rain-bar-fill{height:100%;border-radius:2px;transition:.4s}
+.elev-list{flex:1;overflow-y:auto}
+.elev-list::-webkit-scrollbar{width:4px}
+.elev-list::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
+.elev-item{padding:9px 14px;border-bottom:1px solid #0f2040;cursor:pointer;display:flex;align-items:flex-start;gap:9px;transition:.1s}
+.elev-item:hover{background:#0f2040}
+.rdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.rdot.safe{background:#22c55e}.rdot.watch{background:#fbbf24;box-shadow:0 0 4px #fbbf24}
+.rdot.danger{background:#ef4444;box-shadow:0 0 7px #ef4444;animation:blink 1.5s infinite}
+.ei-name{font-size:.81rem;color:#e2e8f0;font-weight:600;margin-bottom:2px}
+.ei-addr{font-size:.71rem;color:#475569;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+.ei-tags{display:flex;gap:4px;flex-wrap:wrap}
+.etag{font-size:.63rem;padding:1px 5px;border-radius:4px;font-weight:600}
+.etag.fl{background:rgba(96,165,250,.1);color:#60a5fa;border:1px solid rgba(96,165,250,.2)}
+.etag.rn{background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.2)}
+.etag.dg{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.3)}
+.map-wrap{flex:1;position:relative}
+#map{width:100%;height:100%}
+.map-controls{position:absolute;top:12px;right:12px;z-index:800;display:flex;flex-direction:column;gap:6px}
+.mc-btn{background:#0d1b2edd;border:1px solid #1e3a5f;color:#94a3b8;padding:7px 12px;border-radius:6px;font-size:.74rem;cursor:pointer;font-weight:600;transition:.15s;white-space:nowrap;backdrop-filter:blur(4px)}
+.mc-btn:hover,.mc-btn.active{background:#1e3a5f;color:#e2e8f0;border-color:#3b82f6}
+.map-legend{position:absolute;bottom:30px;right:12px;z-index:800;background:#0d1b2eee;border:1px solid #1e3a5f;border-radius:8px;padding:11px 14px;font-size:.72rem;backdrop-filter:blur(4px)}
+.map-legend h4{color:#475569;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
+.leg-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;color:#94a3b8}
+.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.map-search{position:absolute;top:12px;left:12px;z-index:800;display:flex;gap:6px}
+.map-search input{background:#0d1b2edd;border:1px solid #1e3a5f;color:#e2e8f0;padding:8px 12px;border-radius:7px;font-size:.8rem;width:200px;backdrop-filter:blur(4px)}
+.map-search input:focus{outline:none;border-color:#3b82f6}
+.map-search input::placeholder{color:#475569}
+.map-search button{background:#1e3a5f;border:1px solid #3b82f6;color:#60a5fa;padding:8px 12px;border-radius:7px;font-size:.8rem;cursor:pointer}
+.loading-overlay{position:absolute;inset:0;background:#0a0f1ecc;display:flex;align-items:center;justify-content:center;z-index:2000;flex-direction:column;gap:14px}
+.loading-overlay.hidden{display:none}
+.spinner{width:40px;height:40px;border:3px solid #1e3a5f;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-txt{font-size:.82rem;color:#64748b}
+.progress-bar{width:280px;height:4px;background:#1e3a5f;border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:#3b82f6;border-radius:2px;transition:.3s;width:0%}
+/* Cluster marker */
+.cluster-marker{display:flex;align-items:center;justify-content:center;border-radius:50%;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.3);box-shadow:0 2px 8px rgba(0,0,0,.4)}
+/* Leaflet popup dark */
+.leaflet-popup-content-wrapper{background:#0d1b2e;border:1px solid #1e3a5f;color:#e2e8f0;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+.leaflet-popup-tip{background:#0d1b2e}
+.leaflet-popup-content{margin:12px 16px}
+.popup-title{font-size:.88rem;font-weight:700;margin-bottom:8px;color:#e2e8f0}
+.popup-row{display:flex;justify-content:space-between;font-size:.77rem;padding:3px 0;border-bottom:1px solid #1e3a5f;gap:12px}
+.popup-row:last-child{border:none}
+.popup-label{color:#475569}.popup-val{font-weight:600;text-align:right}
+.risk-pill{display:inline-block;padding:2px 10px;border-radius:10px;font-size:.7rem;font-weight:700;margin-bottom:8px}
+.risk-pill.safe{background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.25)}
+.risk-pill.watch{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.25)}
+.risk-pill.danger{background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.3)}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <div class="topbar-logo"><span>🌊</span>BTR 승강기 침수 안전 경보</div>
+    <div class="topbar-sub">Elevator Flood Risk Monitoring — 실시간 강수·침수위험 감시</div>
+  </div>
+  <div class="status-row">
+    <div class="sdot loading" id="sdot"></div>
+    <span class="stxt" id="stxt">로딩 중...</span>
+    <span class="lupd" id="lupd"></span>
+    <button class="refresh-btn" onclick="refresh()">↻ 새로고침</button>
+  </div>
+</div>
+
+<div class="alert-banner" id="alert-banner"></div>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="sb-hdr">📊 현황 요약</div>
+    <div class="stats-grid">
+      <div class="stat-box"><div class="sv total" id="st-total">-</div><div class="sl">모니터링 승강기</div></div>
+      <div class="stat-box"><div class="sv danger" id="st-danger">0</div><div class="sl">🔴 위험</div></div>
+      <div class="stat-box"><div class="sv watch" id="st-watch">0</div><div class="sl">🟡 주의</div></div>
+      <div class="stat-box"><div class="sv safe" id="st-safe">-</div><div class="sl">🟢 안전</div></div>
+    </div>
+    <div class="rain-panel">
+      <h3>🌧 지역별 강수 현황</h3>
+      <div id="rain-list"><div style="text-align:center;padding:14px;color:#475569;font-size:.78rem">로딩 중...</div></div>
+    </div>
+    <div class="sb-hdr">⚠️ 위험·주의 목록</div>
+    <div class="elev-list" id="elev-list">
+      <div style="text-align:center;padding:30px;color:#475569;font-size:.78rem">데이터 로딩 중...</div>
+    </div>
+  </div>
+
+  <div class="map-wrap">
+    <div class="loading-overlay" id="loading">
+      <div class="spinner"></div>
+      <div class="loading-txt" id="ltxt">데이터 로딩 중...</div>
+      <div class="progress-bar"><div class="progress-fill" id="pbar"></div></div>
+    </div>
+
+    <div class="map-search">
+      <input type="text" id="search-input" placeholder="주소 검색..." onkeydown="if(event.key==='Enter')doSearch()">
+      <button onclick="doSearch()">검색</button>
+    </div>
+
+    <div id="map"></div>
+
+    <div class="map-controls">
+      <button class="mc-btn active" onclick="setFilter('all',this)">전체</button>
+      <button class="mc-btn" onclick="setFilter('danger',this)">🔴 위험</button>
+      <button class="mc-btn" onclick="setFilter('watch',this)">🟡 주의</button>
+      <button class="mc-btn" onclick="setFilter('under',this)">🏗 지하층 있음</button>
+    </div>
+
+    <div class="map-legend">
+      <h4>범례</h4>
+      <div class="leg-row"><div class="leg-dot" style="background:#ef4444;box-shadow:0 0 5px #ef4444"></div>위험 — 30mm/h↑ + 지하층</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#fbbf24"></div>주의 — 10mm/h↑ 또는 지하층</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#22c55e"></div>안전</div>
+      <div class="leg-row"><div class="leg-dot" style="background:#3b82f6;border-radius:4px"></div>클러스터 (줌인하면 분리)</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const WORKER_URL = 'https://btr-flood-worker.nirvana-sangsara.workers.dev';
+const VWORLD_KEY = '620104E4-86EB-3711-9E1E-A085D1B979D4';
+
+let map, sc, allPoints = [], rainData = [], currentFilter = 'all';
+let clusterLayer = L.layerGroup();
+
+// ===== MAP INIT =====
+function initMap() {
+  map = L.map('map', {center:[36.5,127.8], zoom:7, zoomControl:false, preferCanvas:true});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution:'©OpenStreetMap ©CARTO', maxZoom:19, subdomains:'abcd'
+  }).addTo(map);
+  L.control.zoom({position:'bottomright'}).addTo(map);
+  clusterLayer.addTo(map);
+  map.on('moveend zoomend', renderClusters);
+}
+
+// ===== RISK CALC =====
+function getAddrRain(addr) {
+  if (!addr || !rainData.length) return 0;
+  const cityMap = {
+    '서울':['서울'], '부산':['부산'], '대구':['대구'], '인천':['인천'],
+    '광주':['광주'], '대전':['대전'], '울산':['울산'], '수원':['경기 수원','경기도 수원'],
+    '창원':['경상남도 창원','경남 창원'], '전주':['전북','전라북도'],
+    '청주':['충청북도','충북'], '포항':['경상북도 포항'],
+  };
+  for (const city of rainData) {
+    const keys = cityMap[city.name] || [city.name];
+    if (keys.some(k => addr.includes(k.slice(0,3)))) return city.rain;
+  }
+  // 기본: 서울 값
+  const seoul = rainData.find(c=>c.name==='서울');
+  return seoul ? seoul.rain : 0;
+}
+
+function calcRisk(pt) {
+  const rain = getAddrRain(pt.a);
+  const hasUnder = pt.u > 0;
+  let risk = 'safe';
+  if (rain >= 30 && hasUnder) risk = 'danger';
+  else if (rain >= 10 || (rain >= 3 && hasUnder)) risk = 'watch';
+  return { risk, rain };
+}
+
+
+// ===== 직접 전량 로딩 (Worker 없이) =====
+async function loadElevatorsDirect() {
+  const PAGE_SIZE = 1000;
+  const firstResp = await fetch(`https://api.btrsoosung.com/api/btrdb/elevatorInstall/search?page=1&pageSize=${PAGE_SIZE}`);
+  const first = await firstResp.json();
+  const total = first.totalCount || 0;
+  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const MAX_PAGES = Math.min(totalPages, 910); // 최대 910,000건
+
+  let raw = first.data || [];
+  setProgress(55, `0 / ${total.toLocaleString()}건 로딩 중...`);
+
+  // 20페이지씩 병렬
+  for (let p = 2; p <= MAX_PAGES; p += 20) {
+    const batch = [];
+    for (let i = p; i < p + 20 && i <= MAX_PAGES; i++) {
+      batch.push(fetch(`https://api.btrsoosung.com/api/btrdb/elevatorInstall/search?page=${i}&pageSize=${PAGE_SIZE}`)
+        .then(r => r.json()).then(j => j.data || []).catch(() => []));
+    }
+    const results = await Promise.all(batch);
+    for (const r of results) raw = raw.concat(r);
+    const pct = 55 + Math.round((raw.length / total) * 35);
+    setProgress(pct, `${raw.length.toLocaleString()} / ${total.toLocaleString()}건 로딩 중...`);
+  }
+
+  // 배치 좌표 변환 (Worker /coord, 500건씩)
+  setProgress(92, '좌표 변환 중...');
+  const addrs = raw.map(e => e.buildingAddress1 || '');
+  const BATCH = 500;
+  const coords = [];
+  for (let i = 0; i < addrs.length; i += BATCH) {
+    try {
+      const r = await fetch(`${WORKER_URL}/coord`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({addresses: addrs.slice(i, i+BATCH)})
+      });
+      const c = await r.json();
+      coords.push(...c);
+    } catch(e) {
+      coords.push(...addrs.slice(i, i+BATCH).map(() => null));
+    }
+  }
+
+  allPoints = raw.map((e, i) => {
+    const coord = coords[i];
+    if (!coord) return null;
+    return {
+      n: e.elevatorNo,
+      b: (e.buildingName || '').slice(0, 20),
+      a: (e.buildingAddress1 || '').slice(0, 30),
+      u: parseInt(e.floorUnder || 0),
+      t: parseInt(e.floorAbove || 0),
+      lat: parseFloat(coord[0].toFixed(5)),
+      lng: parseFloat(coord[1].toFixed(5)),
+    };
+  }).filter(Boolean);
+
+  setProgress(97, `${allPoints.length.toLocaleString()}건 변환 완료`);
+}
+
+// ===== SUPERCLUSTER =====
+function buildSupercluster(points) {
+  sc = new Supercluster({ radius: 60, maxZoom: 16, minZoom: 5 });
+  const features = points.map(p => ({
+    type: 'Feature',
+    properties: { ...p },
+    geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
+  }));
+  sc.load(features);
+}
+
+function renderClusters() {
+  clusterLayer.clearLayers();
+  if (!sc) return;
+
+  const bounds = map.getBounds();
+  const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
+  const zoom = Math.floor(map.getZoom());
+  const clusters = sc.getClusters(bbox, zoom);
+
+  clusters.forEach(feature => {
+    const [lng, lat] = feature.geometry.coordinates;
+    const props = feature.properties;
+
+    if (props.cluster) {
+      // 클러스터 마커
+      const count = props.point_count;
+      const size = count > 1000 ? 52 : count > 100 ? 42 : count > 10 ? 34 : 26;
+      const bg = count > 1000 ? '#1e3a5f' : count > 100 ? '#1e3a5f' : '#1e3a5f';
+      const icon = L.divIcon({
+        html: `<div class="cluster-marker" style="width:${size}px;height:${size}px;background:${bg};font-size:${size>40?'13':'11'}px;border-color:#3b82f6">${count > 999 ? Math.round(count/1000)+'k' : count}</div>`,
+        iconSize: [size, size], iconAnchor: [size/2, size/2], className: ''
+      });
+      const mk = L.marker([lat, lng], { icon });
+      mk.on('click', () => {
+        const z = sc.getClusterExpansionZoom(props.cluster_id);
+        map.setView([lat, lng], Math.min(z, 16));
+      });
+      clusterLayer.addLayer(mk);
+    } else {
+      // 개별 마커
+      const pt = props;
+      const { risk, rain } = calcRisk(pt);
+
+      // 필터 적용
+      if (currentFilter === 'danger' && risk !== 'danger') return;
+      if (currentFilter === 'watch' && risk !== 'watch') return;
+      if (currentFilter === 'under' && pt.u === 0) return;
+
+      const color = risk === 'danger' ? '#ef4444' : risk === 'watch' ? '#fbbf24' : '#22c55e';
+      const sz = risk === 'danger' ? 12 : risk === 'watch' ? 9 : 6;
+      const glow = risk === 'danger' ? `box-shadow:0 0 8px ${color}` : risk === 'watch' ? `box-shadow:0 0 4px ${color}` : '';
+      const icon = L.divIcon({
+        html: `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};border:1px solid ${color}88;${glow}"></div>`,
+        iconSize: [sz, sz], iconAnchor: [sz/2, sz/2], className: ''
+      });
+      const mk = L.marker([lat, lng], { icon });
+      mk.bindPopup(`
+        <div class="risk-pill ${risk}">${risk==='danger'?'⚠ 침수위험':risk==='watch'?'⚡ 주의':'✅ 안전'}</div>
+        <div class="popup-title">${pt.b || '승강기 '+pt.n}</div>
+        <div class="popup-row"><span class="popup-label">주소</span><span class="popup-val" style="font-size:.72rem">${pt.a||'-'}</span></div>
+        <div class="popup-row"><span class="popup-label">지하층</span><span class="popup-val">${pt.u||0}층</span></div>
+        <div class="popup-row"><span class="popup-label">지상층</span><span class="popup-val">${pt.t||0}층</span></div>
+        <div class="popup-row"><span class="popup-label">현재 강수량</span><span class="popup-val" style="color:${rain>=30?'#ef4444':rain>=10?'#fbbf24':'#22c55e'}">${rain}mm/h</span></div>
+        <div class="popup-row"><span class="popup-label">승강기 번호</span><span class="popup-val">${pt.n||'-'}</span></div>
+      `, { maxWidth: 260 });
+      clusterLayer.addLayer(mk);
+    }
+  });
+}
+
+// ===== RAIN UI =====
+function renderRain(data) {
+  const sorted = [...data].sort((a,b) => b.rain - a.rain);
+  document.getElementById('rain-list').innerHTML = sorted.map(d => {
+    const rv = d.rain;
+    const cls = rv>=30?'r3':rv>=10?'r2':rv>=1?'r1':'r0';
+    const barW = Math.min(100, rv/30*100);
+    const barC = rv>=30?'#ef4444':rv>=10?'#fbbf24':rv>=1?'#60a5fa':'#1e3a5f';
+    const pty = d.pty === 1 ? '🌧' : d.pty === 4 ? '⛈' : d.pty === 2 ? '🌨' : '';
+    return `<div class="rain-item" onclick="map.setView([${d.lat},${d.lng}],10)">
+      <div style="flex:1">
+        <div style="display:flex;justify-content:space-between">
+          <span class="city-name">${pty} ${d.name}</span>
+          <span class="rain-val ${cls}">${rv > 0 ? rv+'mm/h' : '강수없음'}</span>
+        </div>
+        <div class="rain-bar"><div class="rain-bar-fill" style="width:${barW}%;background:${barC}"></div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ===== ELEV LIST =====
+function renderElevList() {
+  const risky = allPoints
+    .map(p => ({ ...p, ...calcRisk(p) }))
+    .filter(p => p.risk !== 'safe')
+    .sort((a,b) => (b.risk==='danger'?2:b.risk==='watch'?1:0) - (a.risk==='danger'?2:a.risk==='watch'?1:0) || b.rain - a.rain)
+    .slice(0, 100);
+
+  let safe = 0, watch = 0, danger = 0;
+  allPoints.forEach(p => {
+    const r = calcRisk(p).risk;
+    if (r === 'danger') danger++;
+    else if (r === 'watch') watch++;
+    else safe++;
+  });
+
+  document.getElementById('st-total').textContent = allPoints.length.toLocaleString();
+  document.getElementById('st-safe').textContent = safe.toLocaleString();
+  document.getElementById('st-watch').textContent = watch.toLocaleString();
+  document.getElementById('st-danger').textContent = danger.toLocaleString();
+
+  const banner = document.getElementById('alert-banner');
+  if (danger > 0) {
+    banner.className = 'alert-banner danger';
+    banner.style.display = 'block';
+    banner.textContent = `⚠ 경보: 침수위험 승강기 ${danger.toLocaleString()}대 — 즉각 점검 필요`;
+  } else if (watch > 0) {
+    banner.className = 'alert-banner watch';
+    banner.style.display = 'block';
+    banner.textContent = `⚡ 주의: 강수 또는 지하층 주의 승강기 ${watch.toLocaleString()}대`;
+  } else {
+    banner.style.display = 'none';
+  }
+
+  if (!risky.length) {
+    document.getElementById('elev-list').innerHTML = '<div style="text-align:center;padding:30px;color:#475569;font-size:.78rem">⚡ 현재 위험·주의 승강기 없음</div>';
+    return;
+  }
+
+  document.getElementById('elev-list').innerHTML = risky.map(p =>
+    `<div class="elev-item" onclick="map.setView([${p.lat},${p.lng}],15)">
+      <div class="rdot ${p.risk}"></div>
+      <div>
+        <div class="ei-name">${p.b || '승강기 ' + p.n}</div>
+        <div class="ei-addr">${p.a}</div>
+        <div class="ei-tags">
+          ${p.u > 0 ? `<span class="etag fl">지하${p.u}층</span>` : ''}
+          ${p.rain > 0 ? `<span class="etag rn">${p.rain}mm/h</span>` : ''}
+          ${p.risk === 'danger' ? '<span class="etag dg">⚠침수위험</span>' : ''}
+        </div>
+      </div>
+    </div>`
+  ).join('');
+}
+
+// ===== FILTER =====
+function setFilter(f, btn) {
+  currentFilter = f;
+  document.querySelectorAll('.mc-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderClusters();
+}
+
+// ===== SEARCH =====
+async function doSearch() {
+  const addr = document.getElementById('search-input').value.trim();
+  if (!addr) return;
+  try {
+    const enc = encodeURIComponent(addr);
+    const r = await fetch(`https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${enc}&refine=true&simple=false&format=json&type=parcel&key=${VWORLD_KEY}`);
+    const d = await r.json();
+    if (d?.response?.status === 'OK') {
+      const pt = d.response.result?.point;
+      map.setView([parseFloat(pt.y), parseFloat(pt.x)], 14);
+    } else { alert('주소를 찾을 수 없습니다.'); }
+  } catch(e) { alert('검색 오류'); }
+}
+
+// ===== PROGRESS =====
+function setProgress(pct, txt) {
+  document.getElementById('pbar').style.width = pct + '%';
+  document.getElementById('ltxt').textContent = txt;
+}
+
+// ===== STATUS =====
+function setStatus(state, txt) {
+  const dot = document.getElementById('sdot');
+  dot.className = 'sdot ' + (state === 'ok' ? '' : state === 'loading' ? 'loading' : 'error');
+  document.getElementById('stxt').textContent = txt;
+  if (state === 'ok') document.getElementById('lupd').textContent = '최종: ' + new Date().toLocaleTimeString('ko-KR');
+}
+
+// ===== REFRESH =====
+async function refresh() {
+  setStatus('loading', '강수 업데이트 중...');
+  try {
+    const r = await fetch(`${WORKER_URL}/rain?t=${Date.now()}`);
+    rainData = await r.json();
+    renderRain(rainData);
+    renderElevList();
+    renderClusters();
+    setStatus('ok', '실시간 연결');
+  } catch(e) { setStatus('error', '연결 오류'); }
+}
+
+// ===== MAIN =====
+async function init() {
+  initMap();
+
+  // 1. 강수 데이터
+  setProgress(10, '강수 데이터 수신 중...');
+  try {
+    const r = await fetch(`${WORKER_URL}/rain`);
+    rainData = await r.json();
+    renderRain(rainData);
+    setProgress(30, '강수 데이터 완료');
+  } catch(e) {
+    rainData = [];
+    setProgress(30, '강수 데이터 실패 (계속 진행)');
+  }
+
+  // 2. 승강기 전체 데이터 — 직접 전량 로딩
+  setProgress(40, '승강기 DB 로딩 시작 (908,000건)...');
+  await loadElevatorsDirect();
+
+  // 3. Supercluster 빌드
+  setProgress(95, 'Supercluster 빌드 중...');
+  buildSupercluster(allPoints);
+
+  // 4. 렌더
+  renderElevList();
+  renderClusters();
+
+  document.getElementById('loading').classList.add('hidden');
+  setStatus('ok', '실시간 연결');
+
+  // 5분마다 강수 자동 갱신
+  setInterval(refresh, 5 * 60 * 1000);
+}
+
+init();
+</script>
+</body>
+</html>

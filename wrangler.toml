@@ -1,0 +1,6 @@
+name = "btr-flood-worker"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+DATA_GO_KEY = "mwf9Us6sZ505em8ICDizfSdK0OE7bD/IvaSNf3NAj3b5dDQmSC4rKhTSDZGKKfhGXv6PIV73ZVQm/1cHVMjkLg=="
