@@ -208,35 +208,67 @@ function calcRisk(pt) {
 }
 
 
+// ===== 모바일/캐시 설정 =====
+const IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
+  || window.innerWidth < 768;
+const CACHE_KEY = 'flood_elev_v2';
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24시간
+
+function loadCache() {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+    const { ts, data } = JSON.parse(raw);
+    if (Date.now() - ts > CACHE_TTL) { localStorage.removeItem(CACHE_KEY); return null; }
+    return data;
+  } catch(e) { return null; }
+}
+function saveCache(data) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
+}
+
 // ===== 직접 전량 로딩 (Worker 없이) =====
 async function loadElevatorsDirect() {
+  // 캐시 우선 — 모바일/PC 공통
+  const cached = loadCache();
+  if (cached) {
+    allPoints = cached;
+    setProgress(97, `캐시 ${allPoints.length.toLocaleString()}건 즉시 로드`);
+    return;
+  }
+
   const PAGE_SIZE = 1000;
+  // 모바일: 10,000건(10p) / PC: 100,000건(100p)
+  const PAGE_LIMIT = IS_MOBILE ? 10 : 100;
+
   const firstResp = await fetch(`https://api.btrsoosung.com/api/btrdb/elevatorInstall/search?page=1&pageSize=${PAGE_SIZE}`);
   const first = await firstResp.json();
   const total = first.totalCount || 0;
   const totalPages = Math.ceil(total / PAGE_SIZE);
-  const MAX_PAGES = Math.min(totalPages, 100); // 최대 100,000건 (빠른 로딩)
+  const MAX_PAGES = Math.min(totalPages, PAGE_LIMIT);
+  const targetCount = MAX_PAGES * PAGE_SIZE;
 
   let raw = first.data || [];
-  setProgress(55, `0 / ${total.toLocaleString()}건 로딩 중...`);
+  setProgress(55, `승강기 데이터 로딩 중... (0 / ${targetCount.toLocaleString()}건)`);
 
-  // 20페이지씩 병렬
-  for (let p = 2; p <= MAX_PAGES; p += 20) {
+  // 모바일: 5페이지씩 / PC: 20페이지씩 병렬
+  const PARALLEL = IS_MOBILE ? 5 : 20;
+  for (let p = 2; p <= MAX_PAGES; p += PARALLEL) {
     const batch = [];
-    for (let i = p; i < p + 20 && i <= MAX_PAGES; i++) {
+    for (let i = p; i < p + PARALLEL && i <= MAX_PAGES; i++) {
       batch.push(fetch(`https://api.btrsoosung.com/api/btrdb/elevatorInstall/search?page=${i}&pageSize=${PAGE_SIZE}`)
         .then(r => r.json()).then(j => j.data || []).catch(() => []));
     }
     const results = await Promise.all(batch);
     for (const r of results) raw = raw.concat(r);
-    const pct = 55 + Math.round((raw.length / total) * 35);
-    setProgress(pct, `${raw.length.toLocaleString()} / ${total.toLocaleString()}건 로딩 중...`);
+    const pct = 55 + Math.round((raw.length / targetCount) * 35);
+    setProgress(pct, `승강기 데이터 로딩 중... (${raw.length.toLocaleString()} / ${targetCount.toLocaleString()}건)`);
   }
 
-  // 배치 좌표 변환 (Worker /coord, 500건씩)
+  // 배치 좌표 변환 (Worker /coord, 모바일: 200건씩 / PC: 500건씩)
   setProgress(92, '좌표 변환 중...');
   const addrs = raw.map(e => e.buildingAddress1 || '');
-  const BATCH = 500;
+  const BATCH = IS_MOBILE ? 200 : 500;
   const coords = [];
   for (let i = 0; i < addrs.length; i += BATCH) {
     try {
@@ -265,7 +297,9 @@ async function loadElevatorsDirect() {
     };
   }).filter(Boolean);
 
-  setProgress(97, `${allPoints.length.toLocaleString()}건 변환 완료`);
+  // 캐시 저장 (다음 방문 시 즉시 로드)
+  saveCache(allPoints);
+  setProgress(97, `${allPoints.length.toLocaleString()}건 로드 완료`);
 }
 
 // ===== SUPERCLUSTER =====
