@@ -479,7 +479,7 @@ async function init() {
   }
 
   // 2. 승강기 전체 데이터 — 직접 전량 로딩
-  setProgress(40, '승강기 DB 로딩 중 (최대 100,000건)...');
+  setProgress(40, '승강기 데이터 수신 중...');
   await loadElevatorsDirect();
 
   // 3. Supercluster 빌드
