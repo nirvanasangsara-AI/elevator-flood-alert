@@ -8,6 +8,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -241,8 +242,16 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
       <div class="layer-row">
         <div class="layer-info">
+          <div class="layer-dot" style="background:#06b6d4"></div>
+          <span class="layer-name">☁ 위성·레이더</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-radar" onchange="toggleLayer('radar')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
           <div class="layer-dot" style="background:#f97316;box-shadow:0 0 6px #f97316"></div>
-          <span class="layer-name">기온</span>
+          <span class="layer-name">기온 (시군구)</span>
         </div>
         <label class="toggle"><input type="checkbox" id="lyr-temp" onchange="toggleLayer('temp')"><span class="tslider"></span></label>
       </div>
@@ -262,6 +271,23 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
           <span class="layer-count" id="cnt-typhoon">0</span>
         </div>
         <label class="toggle"><input type="checkbox" id="lyr-typhoon" checked onchange="toggleLayer('typhoon')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
+          <div class="layer-dot" style="background:#f59e0b;box-shadow:0 0 5px #f59e0b"></div>
+          <span class="layer-name">🌏 지진</span>
+          <span class="layer-count" id="cnt-quake">0</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-quake" onchange="toggleLayer('quake')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
+          <div class="layer-dot" style="background:linear-gradient(135deg,#ef4444,#f97316,#22c55e,#3b82f6);border-radius:3px"></div>
+          <span class="layer-name">승강기 밀도</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-heatmap" onchange="toggleLayer('heatmap')"><span class="tslider"></span></label>
       </div>
 
       <div class="layer-row">
@@ -317,19 +343,16 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 const WORKER_URL = 'https://btr-flood-worker.nirvana-sangsara.workers.dev';
 const VWORLD_KEY = '620104E4-86EB-3711-9E1E-A085D1B979D4';
 
-let map, sc, allPoints = [], rainData = [], weatherData = null;
+let map, sc, heatLayer = null, allPoints = [], rainData = [], weatherData = null, quakeData = [];
+let radarFrames = [], radarIdx = 0, radarTimer = null, radarTiles = [];
+
 // 레이어 상태
-const layerState = { rain: true, temp: false, wind: false, typhoon: true, danger: true, watch: true, safe: false, under: false };
+const layerState = { rain:true, radar:false, temp:false, wind:false, typhoon:true, quake:false, heatmap:false, danger:true, watch:true, safe:false, under:false };
 // Leaflet 레이어 그룹
 const layers = {
-  rain: L.layerGroup(),
-  temp: L.layerGroup(),
-  wind: L.layerGroup(),
-  typhoon: L.layerGroup(),
-  danger: L.layerGroup(),
-  watch: L.layerGroup(),
-  safe: L.layerGroup(),
-  under: L.layerGroup(),
+  rain: L.layerGroup(), radar: L.layerGroup(), temp: L.layerGroup(),
+  wind: L.layerGroup(), typhoon: L.layerGroup(), quake: L.layerGroup(),
+  danger: L.layerGroup(), watch: L.layerGroup(), safe: L.layerGroup(), under: L.layerGroup(),
   cluster: L.layerGroup(),
 };
 
@@ -342,9 +365,11 @@ function initMap() {
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   // 레이어 순서: rain 아래, 나머지 위
   layers.rain.addTo(map);
+  layers.radar.addTo(map);
   layers.temp.addTo(map);
   layers.wind.addTo(map);
   layers.typhoon.addTo(map);
+  layers.quake.addTo(map);
   layers.under.addTo(map);
   layers.safe.addTo(map);
   layers.watch.addTo(map);
@@ -357,9 +382,12 @@ function initMap() {
 function toggleLayer(name) {
   layerState[name] = document.getElementById('lyr-' + name).checked;
   if (name === 'rain') renderRainLayer();
+  else if (name === 'radar') renderRadarLayer();
   else if (name === 'temp') renderTempLayer();
   else if (name === 'wind') renderWindLayer();
   else if (name === 'typhoon') renderTyphoonLayer();
+  else if (name === 'quake') renderQuakeLayer();
+  else if (name === 'heatmap') renderHeatmapLayer();
   else renderClusters();
 }
 
@@ -387,51 +415,102 @@ function calcRisk(pt) {
   else if (rain >= 10 || (rain >= 3 && hasUnder)) risk = 'watch';
   return { risk, rain };
 }
+// ── RADAR LAYER (RainViewer — 구름·강수 애니메이션) ──
+async function renderRadarLayer() {
+  layers.radar.clearLayers();
+  if (radarTimer) { clearInterval(radarTimer); radarTimer = null; }
+  radarTiles.forEach(t => { try { map.removeLayer(t); } catch{} });
+  radarTiles = [];
+  if (!layerState.radar) return;
 
-// ── TEMP LAYER (기온 히트맵) ──
+  try {
+    const r = await fetch('https://api.rainviewer.com/public/weather-maps.json');
+    const d = await r.json();
+    radarFrames = (d.radar?.past || []).slice(-6); // 최근 6프레임 (60분)
+    if (!radarFrames.length) return;
+    radarIdx = radarFrames.length - 1;
+
+    function showFrame(i) {
+      radarTiles.forEach(t => { try { map.removeLayer(t); } catch{} });
+      radarTiles = [];
+      const frame = radarFrames[i];
+      if (!frame) return;
+      const tile = L.tileLayer(
+        `https://tilecache.rainviewer.com${frame.path}/512/{z}/{x}/{y}/4/1_1.png`,
+        { opacity: 0.55, attribution: '©RainViewer', maxZoom: 18, tileSize: 512, zoomOffset: -1 }
+      );
+      tile.addTo(map);
+      radarTiles.push(tile);
+    }
+
+    showFrame(radarIdx);
+    // 10초마다 프레임 순환 (애니메이션)
+    radarTimer = setInterval(() => {
+      if (!layerState.radar) { clearInterval(radarTimer); return; }
+      radarIdx = (radarIdx + 1) % radarFrames.length;
+      showFrame(radarIdx);
+    }, 1500);
+  } catch(e) { console.warn('RainViewer 로드 실패', e); }
+}
+
+// ── HEATMAP LAYER (승강기 밀도) ──
+function renderHeatmapLayer() {
+  if (heatLayer) { try { map.removeLayer(heatLayer); } catch{} heatLayer = null; }
+  if (!layerState.heatmap || !allPoints.length) return;
+  const pts = allPoints.map(p => [p.lat, p.lng, 0.5]);
+  heatLayer = L.heatLayer(pts, {
+    radius: 18, blur: 22, maxZoom: 12,
+    gradient: { 0.2: '#312e81', 0.4: '#1d4ed8', 0.6: '#059669', 0.8: '#d97706', 1.0: '#dc2626' }
+  });
+  heatLayer.addTo(map);
+}
+
+// ── TEMP LAYER (기온 — 시군구 단위 choropleth 근사) ──
 function renderTempLayer() {
   layers.temp.clearLayers();
   if (!layerState.temp || !weatherData?.stations) return;
   weatherData.stations.forEach(s => {
     if (s.ta == null) return;
     const ta = s.ta;
-    // 기온 색상: 0℃이하=파랑, 10=하늘, 20=초록, 30=주황, 35이상=빨강
-    const color = ta >= 35 ? '#ef4444' : ta >= 30 ? '#f97316' : ta >= 25 ? '#f59e0b' : ta >= 20 ? '#22c55e' : ta >= 10 ? '#60a5fa' : '#818cf8';
-    const radius = 40000;
+    const color = ta >= 35 ? '#dc2626' : ta >= 30 ? '#ea580c' : ta >= 25 ? '#d97706' : ta >= 20 ? '#16a34a' : ta >= 15 ? '#0284c7' : ta >= 10 ? '#4f46e5' : '#7e22ce';
+    // 시군구 근사: 관측소 기준 대형 반경 + 저투명도 채우기
     L.circle([s.lat, s.lng], {
-      radius, color, fillColor: color,
-      fillOpacity: 0.18, opacity: 0.4, weight: 1,
+      radius: 55000, color, fillColor: color,
+      fillOpacity: 0.12, opacity: 0, weight: 0,
     }).addTo(layers.temp);
+    // 라벨 — 작고 선명하게
     const icon = L.divIcon({
-      html: `<div style="background:rgba(10,16,30,.85);border:1px solid ${color};border-radius:6px;padding:2px 6px;font-size:.72rem;font-weight:700;color:${color};white-space:nowrap">${ta}°C</div>`,
-      iconSize: [52, 22], iconAnchor: [26, 11], className: ''
+      html: `<div style="background:${color}18;border:1.5px solid ${color}88;border-radius:5px;padding:2px 7px;font-size:.71rem;font-weight:800;color:${color};white-space:nowrap;backdrop-filter:blur(2px)">${ta.toFixed(1)}°</div>`,
+      iconSize: [48, 20], iconAnchor: [24, 10], className: ''
     });
     L.marker([s.lat, s.lng], { icon })
-      .bindPopup(`<b>${s.name}</b><br>기온 ${ta}°C / 습도 ${s.hm}%`)
+      .bindPopup(`<b>${s.name}</b><br>🌡 ${ta}°C &nbsp; 💧 ${s.hm}%`)
       .addTo(layers.temp);
   });
 }
 
-// ── WIND LAYER (풍속 화살표) ──
+// ── WIND LAYER (풍속 벡터) ──
 function renderWindLayer() {
   layers.wind.clearLayers();
   if (!layerState.wind || !weatherData?.stations) return;
+  const dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
   weatherData.stations.forEach(s => {
-    if (s.ws == null) return;
-    const ws = s.ws;
+    if (s.ws == null || s.ws < 0.5) return;
+    const ws = s.ws, wd = s.wd || 0;
+    const beaufort = ws >= 17.2 ? 8 : ws >= 13.9 ? 7 : ws >= 10.8 ? 6 : ws >= 8.0 ? 5 : ws >= 5.5 ? 4 : ws >= 3.4 ? 3 : ws >= 1.6 ? 2 : 1;
     const color = ws >= 14 ? '#ef4444' : ws >= 9 ? '#f97316' : ws >= 5 ? '#f59e0b' : '#818cf8';
-    const wd = s.wd || 0;
-    // 풍향 화살표 (wd=바람 오는 방향 → 나가는 방향은 +180)
     const arrowDeg = (wd + 180) % 360;
+    const dirLabel = dirs[Math.round(wd / 22.5) % 16];
+    const sz = Math.min(28, 14 + beaufort * 2);
     const icon = L.divIcon({
-      html: `<div style="text-align:center">
-        <div style="font-size:1.2rem;transform:rotate(${arrowDeg}deg);line-height:1">→</div>
-        <div style="background:rgba(10,16,30,.85);border:1px solid ${color};border-radius:4px;padding:1px 5px;font-size:.68rem;font-weight:700;color:${color};margin-top:1px">${ws}m/s</div>
+      html: `<div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+        <div style="font-size:${sz}px;line-height:1;transform:rotate(${arrowDeg}deg);filter:drop-shadow(0 0 3px ${color})">↑</div>
+        <div style="background:rgba(7,17,31,.88);border:1px solid ${color}88;border-radius:4px;padding:1px 5px;font-size:.65rem;font-weight:700;color:${color}">${ws}m/s</div>
       </div>`,
-      iconSize: [44, 36], iconAnchor: [22, 18], className: ''
+      iconSize: [44, 38], iconAnchor: [22, 19], className: ''
     });
     L.marker([s.lat, s.lng], { icon })
-      .bindPopup(`<b>${s.name}</b><br>풍속 ${ws}m/s / 풍향 ${wd}°`)
+      .bindPopup(`<b>${s.name}</b><br>💨 ${ws}m/s &nbsp; ${dirLabel} (${wd}°)<br>Beaufort ${beaufort}`)
       .addTo(layers.wind);
   });
 }
@@ -441,13 +520,52 @@ function renderTyphoonLayer() {
   layers.typhoon.clearLayers();
   const typh = weatherData?.typhoons || [];
   document.getElementById('cnt-typhoon').textContent = typh.length;
-  if (!layerState.typhoon || !typh.length) return;
-  typh.forEach(t => {
-    // 태풍 위치는 별도 API 필요 — 현재는 배너만 표시
+  if (!typh.length) { document.getElementById('alert-banner').style.display='none'; return; }
+  if (layerState.typhoon) {
     document.getElementById('alert-banner').innerHTML =
-      `🌀 태풍 ${t.name_kr || t.name_en} (${t.yr}-${t.seq}호) 현재 활동 중 — 영향도: ${['','직접영향','간접영향','영향','미영향'][parseInt(t.eff)]||t.eff}`;
+      typh.map(t=>`🌀 <b>${t.name_en}</b> (${t.yr}-${t.seq}호) 활동 중`).join(' &nbsp;|&nbsp; ');
     document.getElementById('alert-banner').className = 'alert-banner danger';
     document.getElementById('alert-banner').style.display = 'block';
+  }
+}
+
+// ── QUAKE LAYER (USGS 실시간 지진) ──
+async function loadAndRenderQuake() {
+  try {
+    // 최근 7일, M2.5 이상, 한반도 주변 bbox
+    const r = await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=now-7days&minmagnitude=2.5&minlatitude=33&maxlatitude=43&minlongitude=124&maxlongitude=132&orderby=time&limit=50');
+    const d = await r.json();
+    quakeData = d.features || [];
+    document.getElementById('cnt-quake').textContent = quakeData.length;
+    renderQuakeLayer();
+  } catch {}
+}
+
+function renderQuakeLayer() {
+  layers.quake.clearLayers();
+  if (!layerState.quake || !quakeData.length) return;
+  quakeData.forEach(f => {
+    const [lng, lat, depth] = f.geometry.coordinates;
+    const mag = f.properties.mag;
+    const place = f.properties.place || '';
+    const time = new Date(f.properties.time).toLocaleString('ko-KR');
+    // 지진은 원형이 적합 — 규모에 비례
+    const r = Math.pow(10, mag * 0.5) * 2000;
+    const color = mag >= 5 ? '#ef4444' : mag >= 4 ? '#f97316' : mag >= 3 ? '#f59e0b' : '#facc15';
+    L.circle([lat, lng], {
+      radius: r, color, fillColor: color,
+      fillOpacity: 0.15, opacity: 0.6, weight: 1.5,
+    }).bindPopup(`<b>🌏 M${mag} 지진</b><br>${place}<br>깊이 ${depth}km<br><small>${time}</small>`)
+      .addTo(layers.quake);
+    if (mag >= 3) {
+      const icon = L.divIcon({
+        html: `<div style="background:rgba(7,17,31,.9);border:2px solid ${color};border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:${color}">M${mag}</div>`,
+        iconSize: [22, 22], iconAnchor: [11, 11], className: ''
+      });
+      L.marker([lat, lng], { icon })
+        .bindPopup(`<b>🌏 M${mag}</b><br>${place}<br>${time}`)
+        .addTo(layers.quake);
+    }
   });
 }
 
@@ -711,6 +829,8 @@ async function refresh() {
     renderTempLayer();
     renderWindLayer();
     renderTyphoonLayer();
+    renderHeatmapLayer();
+    await loadAndRenderQuake();
     renderElevList();
     renderClusters();
     setStatus('ok', '실시간 연결');
@@ -727,9 +847,13 @@ async function init() {
     setProgress(25, '강수 데이터 완료');
   } catch { rainData = []; setProgress(25, '강수 데이터 실패'); }
 
-  // 기상(기온·풍속·태풍) 병렬 로드
+  // 기상(기온·풍속·태풍) + 지진 병렬 로드
   try {
-    weatherData = await (await fetch(`${WORKER_URL}/weather`)).json();
+    const [wd] = await Promise.all([
+      fetch(`${WORKER_URL}/weather`).then(r => r.json()),
+      loadAndRenderQuake(),
+    ]);
+    weatherData = wd;
     renderTyphoonLayer();
   } catch { weatherData = null; }
 
@@ -742,6 +866,7 @@ async function init() {
   renderRainLayer();
   renderElevList();
   renderClusters();
+  renderHeatmapLayer();
 
   document.getElementById('loading').classList.add('hidden');
   setStatus('ok', '실시간 연결');
