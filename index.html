@@ -17,7 +17,7 @@
   --blue:#3b82f6;--blue-light:#60a5fa;
   --green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--purple:#a855f7;
 }
-body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
 
 /* ── TOPBAR ── */
 .topbar{
@@ -163,6 +163,72 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 @keyframes pulse-ring{0%{transform:scale(.9);opacity:.6}70%{transform:scale(1.5);opacity:0}100%{transform:scale(1.5);opacity:0}}
 .pulse-wrap{position:relative;display:flex;align-items:center;justify-content:center}
 .pulse-ring{position:absolute;border-radius:50%;animation:pulse-ring 2s ease-out infinite}
+
+/* ── MOBILE BOTTOM SHEET ── */
+.sb-handle{display:none}
+.mobile-fab{display:none}
+.mobile-stats-bar{display:none}
+.mc-btn{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);color:var(--blue-light);padding:5px 12px;border-radius:16px;font-size:.7rem;cursor:pointer;transition:.15s;white-space:nowrap}
+.mc-btn.active,.mc-btn:hover{background:rgba(59,130,246,.25);border-color:var(--blue)}
+.map-controls{position:absolute;bottom:14px;left:14px;z-index:800;display:flex;gap:6px;flex-wrap:wrap}
+
+@media(max-width:767px){
+  /* ─ topbar 간소화 ─ */
+  .logo-sub{display:none}
+  .logo-title{font-size:.83rem}
+  .topbar{height:46px;padding:0 12px}
+  .topbar-right #lupd{display:none}
+
+  /* ─ layout: 지도 full-screen ─ */
+  .layout{position:relative;overflow:hidden;flex:1;min-height:0}
+  .map-wrap{position:absolute;inset:0;z-index:1}
+
+  /* ─ sidebar → 하단 시트 ─ */
+  .sidebar{
+    position:fixed;bottom:0;left:0;right:0;width:100%;
+    height:72vh;
+    transform:translateY(calc(100% - 60px));
+    transition:transform .32s cubic-bezier(.4,0,.2,1);
+    border-radius:18px 18px 0 0;
+    border-right:none;border-top:1px solid var(--border2);
+    z-index:900;
+    overflow:hidden
+  }
+  .sidebar.open{transform:translateY(0)}
+
+  /* 상단 드래그 핸들 */
+  .sb-handle{
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    height:44px;cursor:pointer;flex-shrink:0;
+    background:var(--panel);border-radius:18px 18px 0 0;
+    border-bottom:1px solid var(--border)
+  }
+  .sb-handle-bar{width:36px;height:4px;background:var(--border2);border-radius:2px}
+  .sb-handle-txt{font-size:.65rem;color:var(--muted);margin-top:4px}
+
+  /* ─ layer-panel / legend → 모바일 숨김 ─ */
+  .layer-panel,.map-legend{display:none!important}
+
+  /* ─ map-search 풀폭 ─ */
+  .map-search{left:8px;right:8px;top:8px}
+  .map-search input{flex:1;width:auto;min-width:0;font-size:.82rem}
+
+  /* ─ map-controls 하단 왼쪽 ─ */
+  .map-controls{bottom:72px;left:8px;right:8px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
+  .map-controls::-webkit-scrollbar{display:none}
+
+  /* ─ 미니 stats 바 (핸들 안에 표시) ─ */
+  .sb-handle-stats{display:flex;gap:16px;margin-top:2px}
+  .sb-hs-item{display:flex;align-items:center;gap:4px;font-size:.7rem;font-weight:700}
+
+  /* sidebar 내부 스크롤 확보 */
+  .elev-list{overflow-y:auto;-webkit-overflow-scrolling:touch}
+
+  /* 시트 열릴 때 지도 위 딤처리 */
+  .map-dim{display:block!important}
+}
+
+.map-dim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:850;transition:opacity .3s}
 </style>
 </head>
 <body>
@@ -189,6 +255,15 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
 <div class="layout">
   <div class="sidebar">
+    <!-- 모바일 드래그 핸들 (PC에서는 display:none) -->
+    <div class="sb-handle" id="sb-handle" onclick="toggleSheet()">
+      <div class="sb-handle-bar"></div>
+      <div class="sb-handle-stats">
+        <span class="sb-hs-item" style="color:var(--blue-light)">전체 <span id="sh-total">-</span></span>
+        <span class="sb-hs-item" style="color:var(--red)">🔴 <span id="sh-danger">0</span></span>
+        <span class="sb-hs-item" style="color:var(--yellow)">🟡 <span id="sh-watch">0</span></span>
+      </div>
+    </div>
 
     <div class="sb-section">
       <div class="stats-grid">
@@ -227,6 +302,17 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
     </div>
 
     <div id="map"></div>
+
+    <!-- 딤 오버레이 (모바일 시트 열릴 때) -->
+    <div class="map-dim" id="map-dim" onclick="closeSheet()"></div>
+
+    <!-- 모바일 퀵 필터 칩 (지도 위 하단) -->
+    <div class="map-controls" id="map-controls">
+      <button class="mc-btn active" onclick="setQuickFilter('all',this)">🗺 전체</button>
+      <button class="mc-btn" onclick="setQuickFilter('danger',this)">🔴 위험</button>
+      <button class="mc-btn" onclick="setQuickFilter('watch',this)">🟡 주의</button>
+      <button class="mc-btn" onclick="setQuickFilter('under',this)">🏗 지하층</button>
+    </div>
 
     <!-- 레이어 토글 패널 -->
     <div class="layer-panel">
@@ -729,6 +815,13 @@ function renderElevList() {
   document.getElementById('st-safe').textContent = safe.toLocaleString();
   document.getElementById('st-watch').textContent = watch.toLocaleString();
   document.getElementById('st-danger').textContent = danger.toLocaleString();
+  // 모바일 핸들 미니 stats 동기화
+  const shTotal = document.getElementById('sh-total');
+  const shDanger = document.getElementById('sh-danger');
+  const shWatch = document.getElementById('sh-watch');
+  if(shTotal) shTotal.textContent = allPoints.length.toLocaleString();
+  if(shDanger) shDanger.textContent = danger;
+  if(shWatch) shWatch.textContent = watch;
   document.getElementById('cnt-danger').textContent = danger;
   document.getElementById('cnt-watch').textContent = watch;
   document.getElementById('cnt-safe').textContent = safe.toLocaleString();
@@ -872,6 +965,53 @@ async function init() {
   setStatus('ok', '실시간 연결');
   setInterval(refresh, 5 * 60 * 1000);
 }
+
+// ===== MOBILE SHEET =====
+let _sheetOpen = false;
+let _touchStartY = 0;
+
+function toggleSheet() {
+  _sheetOpen ? closeSheet() : openSheet();
+}
+function openSheet() {
+  _sheetOpen = true;
+  document.querySelector('.sidebar').classList.add('open');
+  document.getElementById('map-dim').style.opacity = '1';
+}
+function closeSheet() {
+  _sheetOpen = false;
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('map-dim').style.opacity = '0';
+  setTimeout(() => { document.getElementById('map-dim').style.display = ''; }, 300);
+}
+
+// 터치 스와이프 (위로 올리면 열고, 아래로 내리면 닫기)
+(function setupTouch() {
+  const handle = document.getElementById('sb-handle');
+  if (!handle) return;
+  handle.addEventListener('touchstart', e => { _touchStartY = e.touches[0].clientY; }, {passive:true});
+  handle.addEventListener('touchend', e => {
+    const dy = e.changedTouches[0].clientY - _touchStartY;
+    if (dy < -30) openSheet();
+    else if (dy > 30) closeSheet();
+  }, {passive:true});
+})();
+
+// 모바일 퀵 필터 (지도 위 칩버튼)
+let _quickFilter = 'all';
+function setQuickFilter(f, btn) {
+  _quickFilter = f;
+  document.querySelectorAll('.mc-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderClusters();
+}
+
+// renderClusters 호출 시 quickFilter 적용 — 기존 buildSupercluster를 유지하되
+// 퀵필터 상태에 따라 Supercluster.getClusters 결과 후처리
+const _origRenderClusters = window.renderClusters;
+
+// stats 핸들 업데이트
+const _origRenderElevList = window.renderElevList;
 
 init();
 </script>
