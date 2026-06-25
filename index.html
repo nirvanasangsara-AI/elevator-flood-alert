@@ -208,13 +208,11 @@ function calcRisk(pt) {
 }
 
 
-// ===== 모바일/캐시 설정 =====
-const IS_MOBILE = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)
-  || window.innerWidth < 768;
-const CACHE_KEY = 'flood_elev_v2';
-const CACHE_TTL = 24 * 60 * 60 * 1000; // 24시간
+// ===== 로컬 캐시 설정 (브라우저 localStorage, 30분) =====
+const CACHE_KEY = 'flood_elev_v3';
+const CACHE_TTL = 30 * 60 * 1000; // 30분
 
-function loadCache() {
+function loadLocalCache() {
   try {
     const raw = localStorage.getItem(CACHE_KEY);
     if (!raw) return null;
@@ -223,82 +221,47 @@ function loadCache() {
     return data;
   } catch(e) { return null; }
 }
-function saveCache(data) {
+function saveLocalCache(data) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
 }
 
-// ===== 직접 전량 로딩 (Worker 없이) =====
+// ===== Worker R2 캐시 경유 로딩 (단일 요청) =====
 async function loadElevatorsDirect() {
-  // 캐시 우선 — 모바일/PC 공통
-  const cached = loadCache();
-  if (cached) {
-    allPoints = cached;
+  // 1) 브라우저 로컬 캐시 확인
+  const localCached = loadLocalCache();
+  if (localCached) {
+    allPoints = localCached;
     setProgress(97, `캐시 ${allPoints.length.toLocaleString()}건 즉시 로드`);
     return;
   }
 
-  const PAGE_SIZE = 1000;
-  // 모바일: 10,000건(10p) / PC: 100,000건(100p)
-  const PAGE_LIMIT = IS_MOBILE ? 10 : 100;
-
-  const firstResp = await fetch(`https://api.btrsoosung.com/api/btrdb/elevatorInstall/search?page=1&pageSize=${PAGE_SIZE}`);
-  const first = await firstResp.json();
-  const total = first.totalCount || 0;
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-  const MAX_PAGES = Math.min(totalPages, PAGE_LIMIT);
-  const targetCount = MAX_PAGES * PAGE_SIZE;
-
-  let raw = first.data || [];
-  setProgress(55, `승강기 데이터 로딩 중... (0 / ${targetCount.toLocaleString()}건)`);
-
-  // 모바일: 5페이지씩 / PC: 20페이지씩 병렬
-  const PARALLEL = IS_MOBILE ? 5 : 20;
-  for (let p = 2; p <= MAX_PAGES; p += PARALLEL) {
-    const batch = [];
-    for (let i = p; i < p + PARALLEL && i <= MAX_PAGES; i++) {
-      batch.push(fetch(`https://api.btrsoosung.com/api/btrdb/elevatorInstall/search?page=${i}&pageSize=${PAGE_SIZE}`)
-        .then(r => r.json()).then(j => j.data || []).catch(() => []));
-    }
-    const results = await Promise.all(batch);
-    for (const r of results) raw = raw.concat(r);
-    const pct = 55 + Math.round((raw.length / targetCount) * 35);
-    setProgress(pct, `승강기 데이터 로딩 중... (${raw.length.toLocaleString()} / ${targetCount.toLocaleString()}건)`);
+  // 2) Worker /elevators 단일 요청 (R2 캐시 서빙)
+  setProgress(55, '승강기 데이터 수신 중...');
+  let data;
+  try {
+    const r = await fetch(`${WORKER_URL}/elevators?t=${Math.floor(Date.now()/60000)}`);
+    data = await r.json();
+  } catch(e) {
+    setProgress(97, '데이터 로드 실패 — 지도만 표시');
+    return;
   }
 
-  // 배치 좌표 변환 (Worker /coord, 모바일: 200건씩 / PC: 500건씩)
-  setProgress(92, '좌표 변환 중...');
-  const addrs = raw.map(e => e.buildingAddress1 || '');
-  const BATCH = IS_MOBILE ? 200 : 500;
-  const coords = [];
-  for (let i = 0; i < addrs.length; i += BATCH) {
-    try {
-      const r = await fetch(`${WORKER_URL}/coord`, {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({addresses: addrs.slice(i, i+BATCH)})
-      });
-      const c = await r.json();
-      coords.push(...c);
-    } catch(e) {
-      coords.push(...addrs.slice(i, i+BATCH).map(() => null));
-    }
-  }
+  const points = data.points || [];
+  setProgress(90, `${points.length.toLocaleString()}건 수신 완료`);
 
-  allPoints = raw.map((e, i) => {
-    const coord = coords[i];
-    if (!coord) return null;
-    return {
-      n: e.elevatorNo,
-      b: (e.buildingName || '').slice(0, 20),
-      a: (e.buildingAddress1 || '').slice(0, 30),
-      u: parseInt(e.floorUnder || 0),
-      t: parseInt(e.floorAbove || 0),
-      lat: parseFloat(coord[0].toFixed(5)),
-      lng: parseFloat(coord[1].toFixed(5)),
-    };
-  }).filter(Boolean);
+  // 포맷 변환 (Worker 필드 → 기존 allPoints 구조)
+  allPoints = points.map(p => ({
+    n: p.no || '',
+    b: (p.name || '').slice(0, 20),
+    a: (p.addr || '').slice(0, 30),
+    u: p.under || 0,
+    t: 0,
+    lat: p.lat,
+    lng: p.lng,
+  })).filter(p => p.lat && p.lng);
 
-  // 캐시 저장 (다음 방문 시 즉시 로드)
-  saveCache(allPoints);
+  // 3) 브라우저 로컬 캐시 저장 (30분 재방문 즉시 로드)
+  saveLocalCache(allPoints);
   setProgress(97, `${allPoints.length.toLocaleString()}건 로드 완료`);
 }
 
