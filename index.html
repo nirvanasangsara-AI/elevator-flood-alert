@@ -4,109 +4,183 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BTR 승강기 침수 안전 경보</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:#0a0f1e;color:#e2e8f0;height:100vh;display:flex;flex-direction:column;overflow:hidden}
-.topbar{background:linear-gradient(90deg,#0a0f1e,#0d1b2e);border-bottom:1px solid #1e3a5f;padding:0 16px;height:52px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;z-index:1000}
-.topbar-logo{font-size:1rem;font-weight:700;color:#60a5fa;display:flex;align-items:center;gap:8px}
-.topbar-sub{font-size:.7rem;color:#475569;margin-top:1px}
-.status-row{display:flex;align-items:center;gap:10px}
-.sdot{width:8px;height:8px;border-radius:50%;background:#22c55e;box-shadow:0 0 6px #22c55e}
-.sdot.loading{background:#fbbf24;box-shadow:0 0 6px #fbbf24;animation:blink 1s infinite}
-.sdot.error{background:#ef4444;box-shadow:0 0 6px #ef4444}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
-.stxt{font-size:.75rem;color:#94a3b8}
-.lupd{font-size:.72rem;color:#475569}
-.refresh-btn{background:none;border:1px solid #1e3a5f;color:#64748b;padding:5px 12px;border-radius:6px;font-size:.73rem;cursor:pointer;transition:.15s}
-.refresh-btn:hover{border-color:#3b82f6;color:#60a5fa}
-.alert-banner{display:none;padding:8px 16px;font-size:.82rem;font-weight:600;text-align:center;flex-shrink:0}
-.alert-banner.watch{background:rgba(234,179,8,.12);border-bottom:1px solid rgba(234,179,8,.3);color:#fbbf24}
-.alert-banner.danger{background:rgba(239,68,68,.12);border-bottom:1px solid rgba(239,68,68,.4);color:#f87171;animation:flash 1.5s infinite}
-@keyframes flash{0%,100%{opacity:1}50%{opacity:.6}}
+:root{
+  --bg:#07111f;--panel:#0b1929;--border:#162d45;--border2:#1e3a5f;
+  --text:#e2e8f0;--muted:#64748b;--dim:#334155;
+  --blue:#3b82f6;--blue-light:#60a5fa;
+  --green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--purple:#a855f7;
+}
+body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ── TOPBAR ── */
+.topbar{
+  background:linear-gradient(90deg,#07111f 0%,#0a1d33 100%);
+  border-bottom:1px solid var(--border);
+  padding:0 20px;height:54px;display:flex;align-items:center;
+  justify-content:space-between;flex-shrink:0;z-index:1000;
+  box-shadow:0 1px 12px rgba(0,0,0,.4)
+}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.logo-icon{font-size:1.4rem}
+.logo-title{font-size:.95rem;font-weight:700;color:var(--blue-light)}
+.logo-sub{font-size:.68rem;color:var(--muted);margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.status-pill{display:flex;align-items:center;gap:6px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:20px;padding:4px 12px}
+.sdot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);transition:.3s}
+.sdot.loading{background:var(--yellow);box-shadow:0 0 6px var(--yellow);animation:blink 1s infinite}
+.sdot.error{background:var(--red);box-shadow:0 0 6px var(--red)}
+.stxt{font-size:.73rem;color:#94a3b8}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
+.refresh-btn{background:transparent;border:1px solid var(--border2);color:var(--muted);padding:5px 14px;border-radius:8px;font-size:.72rem;cursor:pointer;transition:.15s}
+.refresh-btn:hover{border-color:var(--blue);color:var(--blue-light)}
+
+/* ── ALERT BANNER ── */
+.alert-banner{display:none;padding:7px 20px;font-size:.8rem;font-weight:600;text-align:center;flex-shrink:0;letter-spacing:.02em}
+.alert-banner.watch{background:rgba(245,158,11,.1);border-bottom:1px solid rgba(245,158,11,.25);color:#fcd34d}
+.alert-banner.danger{background:rgba(239,68,68,.1);border-bottom:1px solid rgba(239,68,68,.3);color:#fca5a5;animation:flash 2s infinite}
+@keyframes flash{0%,100%{opacity:1}50%{opacity:.7}}
+
+/* ── LAYOUT ── */
 .layout{display:flex;flex:1;overflow:hidden}
-.sidebar{width:300px;background:#0d1b2e;border-right:1px solid #1e3a5f;display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
-.sb-hdr{padding:10px 14px;border-bottom:1px solid #1e3a5f;font-size:.72rem;font-weight:700;color:#64748b;letter-spacing:.06em;text-transform:uppercase}
-.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:#1e3a5f;flex-shrink:0}
-.stat-box{background:#0d1b2e;padding:12px 14px;text-align:center}
-.sv{font-size:1.5rem;font-weight:800;line-height:1.1}
-.sl{font-size:.67rem;color:#64748b;margin-top:2px}
-.sv.total{color:#60a5fa}.sv.safe{color:#22c55e}.sv.watch{color:#fbbf24}.sv.danger{color:#ef4444}
-.rain-panel{padding:12px 14px;border-bottom:1px solid #1e3a5f;flex-shrink:0}
-.rain-panel h3{font-size:.7rem;color:#475569;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
-.rain-item{display:flex;align-items:center;justify-content:space-between;padding:7px 10px;border-radius:6px;background:#0a0f1e;border:1px solid #1e3a5f;margin-bottom:5px;cursor:pointer;transition:.15s}
-.rain-item:hover{border-color:#3b82f6}
-.city-name{font-size:.8rem;color:#cbd5e1;font-weight:500}
-.rain-val{font-size:.82rem;font-weight:700}
-.r0{color:#475569}.r1{color:#93c5fd}.r2{color:#fbbf24}.r3{color:#f87171}
-.rain-bar{height:3px;background:#1e293b;border-radius:2px;margin-top:4px;overflow:hidden}
-.rain-bar-fill{height:100%;border-radius:2px;transition:.4s}
+
+/* ── SIDEBAR ── */
+.sidebar{width:310px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.sb-section{border-bottom:1px solid var(--border);flex-shrink:0}
+.sb-hdr{padding:9px 16px;font-size:.68rem;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+
+/* stats */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}
+.stat-box{background:var(--panel);padding:10px 8px;text-align:center;cursor:default}
+.sv{font-size:1.3rem;font-weight:800;line-height:1.1}
+.sl{font-size:.6rem;color:var(--muted);margin-top:3px}
+.sv.total{color:var(--blue-light)}.sv.danger{color:var(--red)}.sv.watch{color:var(--yellow)}.sv.safe{color:var(--green)}
+
+/* rain panel */
+.rain-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:10px 14px}
+.rain-card{background:#0a1929;border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:.15s;position:relative;overflow:hidden}
+.rain-card:hover{border-color:var(--blue);background:#0d1f35}
+.rain-card.r3{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.05)}
+.rain-card.r2{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.04)}
+.rain-card.r1{border-color:rgba(96,165,250,.25)}
+.rc-name{font-size:.78rem;font-weight:600;color:#cbd5e1}
+.rc-val{font-size:.85rem;font-weight:800;margin-top:2px}
+.rc-bar{height:2px;background:var(--border);border-radius:1px;margin-top:5px;overflow:hidden}
+.rc-fill{height:100%;border-radius:1px;transition:.5s}
+.r0 .rc-val{color:var(--muted)} .r1 .rc-val{color:var(--blue-light)} .r2 .rc-val{color:var(--yellow)} .r3 .rc-val{color:var(--red)}
+
+/* elev list */
 .elev-list{flex:1;overflow-y:auto}
-.elev-list::-webkit-scrollbar{width:4px}
-.elev-list::-webkit-scrollbar-thumb{background:#1e3a5f;border-radius:2px}
-.elev-item{padding:9px 14px;border-bottom:1px solid #0f2040;cursor:pointer;display:flex;align-items:flex-start;gap:9px;transition:.1s}
-.elev-item:hover{background:#0f2040}
-.rdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:4px}
-.rdot.safe{background:#22c55e}.rdot.watch{background:#fbbf24;box-shadow:0 0 4px #fbbf24}
-.rdot.danger{background:#ef4444;box-shadow:0 0 7px #ef4444;animation:blink 1.5s infinite}
-.ei-name{font-size:.81rem;color:#e2e8f0;font-weight:600;margin-bottom:2px}
-.ei-addr{font-size:.71rem;color:#475569;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
-.ei-tags{display:flex;gap:4px;flex-wrap:wrap}
-.etag{font-size:.63rem;padding:1px 5px;border-radius:4px;font-weight:600}
-.etag.fl{background:rgba(96,165,250,.1);color:#60a5fa;border:1px solid rgba(96,165,250,.2)}
-.etag.rn{background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.2)}
-.etag.dg{background:rgba(239,68,68,.12);color:#f87171;border:1px solid rgba(239,68,68,.3)}
+.elev-list::-webkit-scrollbar{width:3px}
+.elev-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.elev-item{padding:8px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:flex-start;gap:10px;transition:.1s}
+.elev-item:hover{background:#0d1f35}
+.rdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.rdot.safe{background:var(--green)}.rdot.watch{background:var(--yellow);box-shadow:0 0 5px var(--yellow)}
+.rdot.danger{background:var(--red);box-shadow:0 0 8px var(--red);animation:blink 1.5s infinite}
+.ei-name{font-size:.8rem;font-weight:600;color:var(--text);margin-bottom:2px}
+.ei-addr{font-size:.69rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px;margin-bottom:4px}
+.ei-tags{display:flex;gap:3px;flex-wrap:wrap}
+.etag{font-size:.6rem;padding:1px 6px;border-radius:4px;font-weight:700}
+.etag.fl{background:rgba(96,165,250,.1);color:var(--blue-light);border:1px solid rgba(96,165,250,.2)}
+.etag.rn{background:rgba(245,158,11,.1);color:var(--yellow);border:1px solid rgba(245,158,11,.2)}
+.etag.dg{background:rgba(239,68,68,.1);color:#fca5a5;border:1px solid rgba(239,68,68,.25)}
+
+/* ── MAP ── */
 .map-wrap{flex:1;position:relative}
 #map{width:100%;height:100%}
-.map-controls{position:absolute;top:12px;right:12px;z-index:800;display:flex;flex-direction:column;gap:6px}
-.mc-btn{background:#0d1b2edd;border:1px solid #1e3a5f;color:#94a3b8;padding:7px 12px;border-radius:6px;font-size:.74rem;cursor:pointer;font-weight:600;transition:.15s;white-space:nowrap;backdrop-filter:blur(4px)}
-.mc-btn:hover,.mc-btn.active{background:#1e3a5f;color:#e2e8f0;border-color:#3b82f6}
-.map-legend{position:absolute;bottom:30px;right:12px;z-index:800;background:#0d1b2eee;border:1px solid #1e3a5f;border-radius:8px;padding:11px 14px;font-size:.72rem;backdrop-filter:blur(4px)}
-.map-legend h4{color:#475569;font-size:.68rem;text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px}
-.leg-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;color:#94a3b8}
-.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
-.map-search{position:absolute;top:12px;left:12px;z-index:800;display:flex;gap:6px}
-.map-search input{background:#0d1b2edd;border:1px solid #1e3a5f;color:#e2e8f0;padding:8px 12px;border-radius:7px;font-size:.8rem;width:200px;backdrop-filter:blur(4px)}
-.map-search input:focus{outline:none;border-color:#3b82f6}
-.map-search input::placeholder{color:#475569}
-.map-search button{background:#1e3a5f;border:1px solid #3b82f6;color:#60a5fa;padding:8px 12px;border-radius:7px;font-size:.8rem;cursor:pointer}
-.loading-overlay{position:absolute;inset:0;background:#0a0f1ecc;display:flex;align-items:center;justify-content:center;z-index:2000;flex-direction:column;gap:14px}
+
+/* loading overlay */
+.loading-overlay{position:absolute;inset:0;background:rgba(7,17,31,.85);display:flex;align-items:center;justify-content:center;z-index:2000;flex-direction:column;gap:16px;backdrop-filter:blur(3px)}
 .loading-overlay.hidden{display:none}
-.spinner{width:40px;height:40px;border:3px solid #1e3a5f;border-top-color:#3b82f6;border-radius:50%;animation:spin 1s linear infinite}
+.spinner{width:36px;height:36px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.loading-txt{font-size:.82rem;color:#64748b}
-.progress-bar{width:280px;height:4px;background:#1e3a5f;border-radius:2px;overflow:hidden}
-.progress-fill{height:100%;background:#3b82f6;border-radius:2px;transition:.3s;width:0%}
-/* Cluster marker */
-.cluster-marker{display:flex;align-items:center;justify-content:center;border-radius:50%;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.3);box-shadow:0 2px 8px rgba(0,0,0,.4)}
-/* Leaflet popup dark */
-.leaflet-popup-content-wrapper{background:#0d1b2e;border:1px solid #1e3a5f;color:#e2e8f0;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.5)}
-.leaflet-popup-tip{background:#0d1b2e}
-.leaflet-popup-content{margin:12px 16px}
-.popup-title{font-size:.88rem;font-weight:700;margin-bottom:8px;color:#e2e8f0}
-.popup-row{display:flex;justify-content:space-between;font-size:.77rem;padding:3px 0;border-bottom:1px solid #1e3a5f;gap:12px}
+.loading-txt{font-size:.8rem;color:var(--muted)}
+.progress-bar{width:260px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),#818cf8);border-radius:2px;transition:.4s;width:0%}
+
+/* search bar */
+.map-search{position:absolute;top:14px;left:14px;z-index:800;display:flex;gap:6px}
+.map-search input{background:rgba(11,25,41,.92);border:1px solid var(--border2);color:var(--text);padding:8px 14px;border-radius:8px;font-size:.78rem;width:210px;backdrop-filter:blur(6px);outline:none;transition:.15s}
+.map-search input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+.map-search input::placeholder{color:var(--muted)}
+.map-search button{background:rgba(30,58,95,.8);border:1px solid var(--blue);color:var(--blue-light);padding:8px 12px;border-radius:8px;font-size:.78rem;cursor:pointer;backdrop-filter:blur(6px);transition:.15s}
+.map-search button:hover{background:rgba(59,130,246,.2)}
+
+/* ── LAYER PANEL ── */
+.layer-panel{
+  position:absolute;top:14px;right:14px;z-index:800;
+  background:rgba(11,25,41,.94);border:1px solid var(--border2);
+  border-radius:12px;padding:12px 14px;min-width:190px;
+  backdrop-filter:blur(8px);box-shadow:0 4px 24px rgba(0,0,0,.5)
+}
+.lp-title{font-size:.65rem;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.layer-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);gap:10px}
+.layer-row:last-child{border:none}
+.layer-info{display:flex;align-items:center;gap:8px}
+.layer-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.layer-name{font-size:.76rem;color:#94a3b8;font-weight:500}
+.layer-count{font-size:.65rem;color:var(--muted);background:rgba(255,255,255,.05);padding:1px 6px;border-radius:8px}
+/* toggle switch */
+.toggle{position:relative;width:34px;height:18px;flex-shrink:0}
+.toggle input{opacity:0;width:0;height:0}
+.tslider{position:absolute;inset:0;background:var(--border2);border-radius:9px;transition:.25s;cursor:pointer}
+.tslider:before{content:'';position:absolute;width:12px;height:12px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.25s}
+.toggle input:checked+.tslider{background:var(--blue)}
+.toggle input:checked+.tslider:before{transform:translateX(16px)}
+
+/* legend */
+.map-legend{position:absolute;bottom:28px;right:14px;z-index:800;background:rgba(11,25,41,.92);border:1px solid var(--border2);border-radius:10px;padding:10px 14px;font-size:.7rem;backdrop-filter:blur(6px)}
+.map-legend h4{color:var(--muted);font-size:.63rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
+.leg-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;color:#94a3b8}
+.leg-row:last-child{margin:0}
+.leg-icon{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+
+/* Leaflet dark popup */
+.leaflet-popup-content-wrapper{background:#0b1929;border:1px solid var(--border2);color:var(--text);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.6)}
+.leaflet-popup-tip{background:#0b1929}
+.leaflet-popup-content{margin:14px 16px;min-width:200px}
+.popup-badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:.68rem;font-weight:700;margin-bottom:10px}
+.popup-badge.safe{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.3)}
+.popup-badge.watch{background:rgba(245,158,11,.12);color:var(--yellow);border:1px solid rgba(245,158,11,.3)}
+.popup-badge.danger{background:rgba(239,68,68,.12);color:#fca5a5;border:1px solid rgba(239,68,68,.35)}
+.popup-title{font-size:.88rem;font-weight:700;margin-bottom:8px}
+.popup-row{display:flex;justify-content:space-between;font-size:.75rem;padding:4px 0;border-bottom:1px solid var(--border);gap:14px}
 .popup-row:last-child{border:none}
-.popup-label{color:#475569}.popup-val{font-weight:600;text-align:right}
-.risk-pill{display:inline-block;padding:2px 10px;border-radius:10px;font-size:.7rem;font-weight:700;margin-bottom:8px}
-.risk-pill.safe{background:rgba(34,197,94,.12);color:#22c55e;border:1px solid rgba(34,197,94,.25)}
-.risk-pill.watch{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.25)}
-.risk-pill.danger{background:rgba(239,68,68,.12);color:#ef4444;border:1px solid rgba(239,68,68,.3)}
+.popup-label{color:var(--muted)}.popup-val{font-weight:600;text-align:right}
+
+/* cluster */
+.cm{display:flex;align-items:center;justify-content:center;border-radius:50%;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.2);box-shadow:0 2px 10px rgba(0,0,0,.5);transition:.15s}
+/* rain circle */
+.rain-circle{border-radius:50%;pointer-events:none}
+/* pulse */
+@keyframes pulse-ring{0%{transform:scale(.9);opacity:.6}70%{transform:scale(1.5);opacity:0}100%{transform:scale(1.5);opacity:0}}
+.pulse-wrap{position:relative;display:flex;align-items:center;justify-content:center}
+.pulse-ring{position:absolute;border-radius:50%;animation:pulse-ring 2s ease-out infinite}
 </style>
 </head>
 <body>
 
 <div class="topbar">
-  <div>
-    <div class="topbar-logo"><span>🌊</span>BTR 승강기 침수 안전 경보</div>
-    <div class="topbar-sub">Elevator Flood Risk Monitoring — 실시간 강수·침수위험 감시</div>
+  <div class="topbar-left">
+    <div class="logo-icon">🌊</div>
+    <div>
+      <div class="logo-title">BTR 승강기 침수 안전 경보</div>
+      <div class="logo-sub">Elevator Flood Risk Monitoring · 실시간 강수·침수위험 감시</div>
+    </div>
   </div>
-  <div class="status-row">
-    <div class="sdot loading" id="sdot"></div>
-    <span class="stxt" id="stxt">로딩 중...</span>
-    <span class="lupd" id="lupd"></span>
-    <button class="refresh-btn" onclick="refresh()">↻ 새로고침</button>
+  <div class="topbar-right">
+    <div class="status-pill">
+      <div class="sdot loading" id="sdot"></div>
+      <span class="stxt" id="stxt">로딩 중...</span>
+    </div>
+    <span id="lupd" style="font-size:.68rem;color:var(--muted)"></span>
+    <button class="refresh-btn" onclick="refresh()">↻ 갱신</button>
   </div>
 </div>
 
@@ -114,24 +188,32 @@ body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:#0a0f1e;colo
 
 <div class="layout">
   <div class="sidebar">
-    <div class="sb-hdr">📊 현황 요약</div>
-    <div class="stats-grid">
-      <div class="stat-box"><div class="sv total" id="st-total">-</div><div class="sl">모니터링 승강기</div></div>
-      <div class="stat-box"><div class="sv danger" id="st-danger">0</div><div class="sl">🔴 위험</div></div>
-      <div class="stat-box"><div class="sv watch" id="st-watch">0</div><div class="sl">🟡 주의</div></div>
-      <div class="stat-box"><div class="sv safe" id="st-safe">-</div><div class="sl">🟢 안전</div></div>
+
+    <div class="sb-section">
+      <div class="stats-grid">
+        <div class="stat-box"><div class="sv total" id="st-total">-</div><div class="sl">전체</div></div>
+        <div class="stat-box"><div class="sv danger" id="st-danger">0</div><div class="sl">🔴 위험</div></div>
+        <div class="stat-box"><div class="sv watch" id="st-watch">0</div><div class="sl">🟡 주의</div></div>
+        <div class="stat-box"><div class="sv safe" id="st-safe">-</div><div class="sl">🟢 안전</div></div>
+      </div>
     </div>
-    <div class="rain-panel">
-      <h3>🌧 지역별 강수 현황</h3>
-      <div id="rain-list"><div style="text-align:center;padding:14px;color:#475569;font-size:.78rem">로딩 중...</div></div>
+
+    <div class="sb-section">
+      <div class="sb-hdr">🌧 지역별 강수량</div>
+      <div class="rain-grid" id="rain-list">
+        <div style="grid-column:1/-1;text-align:center;padding:12px;color:var(--muted);font-size:.75rem">로딩 중...</div>
+      </div>
     </div>
-    <div class="sb-hdr">⚠️ 위험·주의 목록</div>
+
+    <div class="sb-hdr">⚠️ 위험·주의 승강기</div>
     <div class="elev-list" id="elev-list">
-      <div style="text-align:center;padding:30px;color:#475569;font-size:.78rem">데이터 로딩 중...</div>
+      <div style="text-align:center;padding:30px;color:var(--muted);font-size:.75rem">데이터 로딩 중...</div>
     </div>
+
   </div>
 
   <div class="map-wrap">
+
     <div class="loading-overlay" id="loading">
       <div class="spinner"></div>
       <div class="loading-txt" id="ltxt">데이터 로딩 중...</div>
@@ -145,20 +227,64 @@ body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:#0a0f1e;colo
 
     <div id="map"></div>
 
-    <div class="map-controls">
-      <button class="mc-btn active" onclick="setFilter('all',this)">전체</button>
-      <button class="mc-btn" onclick="setFilter('danger',this)">🔴 위험</button>
-      <button class="mc-btn" onclick="setFilter('watch',this)">🟡 주의</button>
-      <button class="mc-btn" onclick="setFilter('under',this)">🏗 지하층 있음</button>
+    <!-- 레이어 토글 패널 -->
+    <div class="layer-panel">
+      <div class="lp-title">🗂 레이어</div>
+
+      <div class="layer-row">
+        <div class="layer-info">
+          <div class="layer-dot" style="background:rgba(59,130,246,.7);box-shadow:0 0 6px rgba(59,130,246,.5)"></div>
+          <span class="layer-name">강수 범위</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-rain" checked onchange="toggleLayer('rain')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
+          <div class="layer-dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></div>
+          <span class="layer-name">침수 위험</span>
+          <span class="layer-count" id="cnt-danger">0</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-danger" checked onchange="toggleLayer('danger')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
+          <div class="layer-dot" style="background:var(--yellow);box-shadow:0 0 4px var(--yellow)"></div>
+          <span class="layer-name">주의</span>
+          <span class="layer-count" id="cnt-watch">0</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-watch" checked onchange="toggleLayer('watch')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
+          <div class="layer-dot" style="background:var(--green)"></div>
+          <span class="layer-name">안전</span>
+          <span class="layer-count" id="cnt-safe">0</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-safe" onchange="toggleLayer('safe')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
+          <div class="layer-dot" style="background:var(--blue-light);border-radius:3px"></div>
+          <span class="layer-name">지하층 있음</span>
+          <span class="layer-count" id="cnt-under">-</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-under" onchange="toggleLayer('under')"><span class="tslider"></span></label>
+      </div>
     </div>
 
+    <!-- 범례 -->
     <div class="map-legend">
       <h4>범례</h4>
-      <div class="leg-row"><div class="leg-dot" style="background:#ef4444;box-shadow:0 0 5px #ef4444"></div>위험 — 30mm/h↑ + 지하층</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#fbbf24"></div>주의 — 10mm/h↑ 또는 지하층</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#22c55e"></div>안전</div>
-      <div class="leg-row"><div class="leg-dot" style="background:#3b82f6;border-radius:4px"></div>클러스터 (줌인하면 분리)</div>
+      <div class="leg-row"><div class="leg-icon" style="background:var(--red);box-shadow:0 0 5px var(--red)"></div>침수위험 — 30mm/h↑ + 지하층</div>
+      <div class="leg-row"><div class="leg-icon" style="background:var(--yellow)"></div>주의 — 10mm/h↑ 또는 지하층+강수</div>
+      <div class="leg-row"><div class="leg-icon" style="background:var(--green)"></div>안전</div>
+      <div class="leg-row"><div class="leg-icon" style="background:rgba(59,130,246,.5);border:1px solid var(--blue)"></div>강수 반경 (반경=강도)</div>
     </div>
+
   </div>
 </div>
 
@@ -166,36 +292,60 @@ body{font-family:'Noto Sans KR',-apple-system,sans-serif;background:#0a0f1e;colo
 const WORKER_URL = 'https://btr-flood-worker.nirvana-sangsara.workers.dev';
 const VWORLD_KEY = '620104E4-86EB-3711-9E1E-A085D1B979D4';
 
-let map, sc, allPoints = [], rainData = [], currentFilter = 'all';
-let clusterLayer = L.layerGroup();
+let map, sc, allPoints = [], rainData = [];
+// 레이어 상태
+const layerState = { rain: true, danger: true, watch: true, safe: false, under: false };
+// Leaflet 레이어 그룹
+const layers = {
+  rain: L.layerGroup(),
+  danger: L.layerGroup(),
+  watch: L.layerGroup(),
+  safe: L.layerGroup(),
+  under: L.layerGroup(),
+  cluster: L.layerGroup(),
+};
 
-// ===== MAP INIT =====
+// ── MAP INIT ──
 function initMap() {
-  map = L.map('map', {center:[36.5,127.8], zoom:7, zoomControl:false, preferCanvas:true});
+  map = L.map('map', { center: [36.5, 127.8], zoom: 7, zoomControl: false, preferCanvas: true });
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution:'©OpenStreetMap ©CARTO', maxZoom:19, subdomains:'abcd'
+    attribution: '©OpenStreetMap ©CARTO', maxZoom: 19, subdomains: 'abcd'
   }).addTo(map);
-  L.control.zoom({position:'bottomright'}).addTo(map);
-  clusterLayer.addTo(map);
+  L.control.zoom({ position: 'bottomright' }).addTo(map);
+  // 레이어 순서: rain 아래, 나머지 위
+  layers.rain.addTo(map);
+  layers.under.addTo(map);
+  layers.safe.addTo(map);
+  layers.watch.addTo(map);
+  layers.danger.addTo(map);
+  layers.cluster.addTo(map);
   map.on('moveend zoomend', renderClusters);
 }
 
-// ===== RISK CALC =====
+// ── LAYER TOGGLE ──
+function toggleLayer(name) {
+  layerState[name] = document.getElementById('lyr-' + name).checked;
+  if (name === 'rain') {
+    renderRainLayer();
+  } else {
+    renderClusters();
+  }
+}
+
+// ── RAIN → RISK ──
 function getAddrRain(addr) {
   if (!addr || !rainData.length) return 0;
   const cityMap = {
-    '서울':['서울'], '부산':['부산'], '대구':['대구'], '인천':['인천'],
-    '광주':['광주'], '대전':['대전'], '울산':['울산'], '수원':['경기 수원','경기도 수원'],
-    '창원':['경상남도 창원','경남 창원'], '전주':['전북','전라북도'],
-    '청주':['충청북도','충북'], '포항':['경상북도 포항'],
+    '서울': ['서울'], '부산': ['부산'], '대구': ['대구'], '인천': ['인천'],
+    '광주': ['광주'], '대전': ['대전'], '울산': ['울산'],
+    '수원': ['수원', '경기도 수원'], '창원': ['창원', '경상남도 창원'],
+    '전주': ['전주', '전북'], '청주': ['청주', '충청북도'], '포항': ['포항', '경상북도 포항'],
   };
   for (const city of rainData) {
     const keys = cityMap[city.name] || [city.name];
-    if (keys.some(k => addr.includes(k.slice(0,3)))) return city.rain;
+    if (keys.some(k => addr.startsWith(k) || addr.includes(k.slice(0, 3)))) return city.rain;
   }
-  // 기본: 서울 값
-  const seoul = rainData.find(c=>c.name==='서울');
-  return seoul ? seoul.rain : 0;
+  return rainData.find(c => c.name === '서울')?.rain || 0;
 }
 
 function calcRisk(pt) {
@@ -207,293 +357,286 @@ function calcRisk(pt) {
   return { risk, rain };
 }
 
+// ── RAIN LAYER (강수 반경 시각화) ──
+function renderRainLayer() {
+  layers.rain.clearLayers();
+  if (!layerState.rain || !rainData.length) return;
+  rainData.forEach(c => {
+    if (!c.rain || c.rain <= 0) return;
+    const mm = c.rain;
+    // 반경: 강수량에 비례 (최소 15km, 최대 80km)
+    const radius = Math.min(80000, 15000 + mm * 1800);
+    const opacity = Math.min(0.45, 0.1 + mm / 80);
+    const color = mm >= 30 ? '#ef4444' : mm >= 10 ? '#f59e0b' : '#3b82f6';
+    const circle = L.circle([c.lat, c.lng], {
+      radius,
+      color: color,
+      fillColor: color,
+      fillOpacity: opacity,
+      opacity: opacity * 1.5,
+      weight: 1,
+    });
+    circle.bindPopup(`
+      <div class="popup-title">🌧 ${c.name} 강수량</div>
+      <div class="popup-row"><span class="popup-label">강수량</span><span class="popup-val" style="color:${color}">${mm}mm/h</span></div>
+      <div class="popup-row"><span class="popup-label">강수 유형</span><span class="popup-val">${c.pty===1?'비':c.pty===4?'소나기':c.pty===2?'눈비':'강수'}</span></div>
+    `, { maxWidth: 200 });
+    layers.rain.addLayer(circle);
 
-// ===== 로컬 캐시 설정 (브라우저 localStorage, 30분) =====
-const CACHE_KEY = 'flood_elev_v3';
-const CACHE_TTL = 30 * 60 * 1000; // 30분
-
-function loadLocalCache() {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY);
-    if (!raw) return null;
-    const { ts, data } = JSON.parse(raw);
-    if (Date.now() - ts > CACHE_TTL) { localStorage.removeItem(CACHE_KEY); return null; }
-    return data;
-  } catch(e) { return null; }
-}
-function saveLocalCache(data) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch(e) {}
-}
-
-// ===== Worker R2 캐시 경유 로딩 (단일 요청) =====
-async function loadElevatorsDirect() {
-  // 1) 브라우저 로컬 캐시 확인
-  const localCached = loadLocalCache();
-  if (localCached) {
-    allPoints = localCached;
-    setProgress(97, `캐시 ${allPoints.length.toLocaleString()}건 즉시 로드`);
-    return;
-  }
-
-  // 2) Worker /elevators 단일 요청 (R2 캐시 서빙)
-  setProgress(55, '승강기 데이터 수신 중...');
-  let data;
-  try {
-    const r = await fetch(`${WORKER_URL}/elevators?t=${Math.floor(Date.now()/60000)}`);
-    data = await r.json();
-  } catch(e) {
-    setProgress(97, '데이터 로드 실패 — 지도만 표시');
-    return;
-  }
-
-  const points = data.points || [];
-  setProgress(90, `${points.length.toLocaleString()}건 수신 완료`);
-
-  // 포맷 변환 (Worker 필드 → 기존 allPoints 구조)
-  allPoints = points.map(p => ({
-    n: p.no || '',
-    b: (p.name || '').slice(0, 20),
-    a: (p.addr || '').slice(0, 30),
-    u: p.under || 0,
-    t: 0,
-    lat: p.lat,
-    lng: p.lng,
-  })).filter(p => p.lat && p.lng);
-
-  // 3) 브라우저 로컬 캐시 저장 (30분 재방문 즉시 로드)
-  saveLocalCache(allPoints);
-  setProgress(97, `${allPoints.length.toLocaleString()}건 로드 완료`);
-}
-
-// ===== SUPERCLUSTER =====
-function buildSupercluster(points) {
-  sc = new Supercluster({ radius: 60, maxZoom: 16, minZoom: 5 });
-  const features = points.map(p => ({
-    type: 'Feature',
-    properties: { ...p },
-    geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
-  }));
-  sc.load(features);
-}
-
-function renderClusters() {
-  clusterLayer.clearLayers();
-  if (!sc) return;
-
-  const bounds = map.getBounds();
-  const bbox = [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
-  const zoom = Math.floor(map.getZoom());
-  const clusters = sc.getClusters(bbox, zoom);
-
-  clusters.forEach(feature => {
-    const [lng, lat] = feature.geometry.coordinates;
-    const props = feature.properties;
-
-    if (props.cluster) {
-      // 클러스터 마커
-      const count = props.point_count;
-      const size = count > 1000 ? 52 : count > 100 ? 42 : count > 10 ? 34 : 26;
-      const bg = count > 1000 ? '#1e3a5f' : count > 100 ? '#1e3a5f' : '#1e3a5f';
+    // 강수가 강하면 중심 펄스 마커 추가
+    if (mm >= 10) {
+      const pulseSz = mm >= 30 ? 18 : 13;
       const icon = L.divIcon({
-        html: `<div class="cluster-marker" style="width:${size}px;height:${size}px;background:${bg};font-size:${size>40?'13':'11'}px;border-color:#3b82f6">${count > 999 ? Math.round(count/1000)+'k' : count}</div>`,
-        iconSize: [size, size], iconAnchor: [size/2, size/2], className: ''
+        html: `<div class="pulse-wrap" style="width:${pulseSz}px;height:${pulseSz}px">
+          <div class="pulse-ring" style="width:${pulseSz}px;height:${pulseSz}px;background:${color};opacity:.5"></div>
+          <div style="width:${pulseSz*0.6}px;height:${pulseSz*0.6}px;border-radius:50%;background:${color};z-index:1;box-shadow:0 0 8px ${color}"></div>
+        </div>`,
+        iconSize: [pulseSz, pulseSz], iconAnchor: [pulseSz / 2, pulseSz / 2], className: ''
       });
-      const mk = L.marker([lat, lng], { icon });
-      mk.on('click', () => {
-        const z = sc.getClusterExpansionZoom(props.cluster_id);
-        map.setView([lat, lng], Math.min(z, 16));
-      });
-      clusterLayer.addLayer(mk);
-    } else {
-      // 개별 마커
-      const pt = props;
-      const { risk, rain } = calcRisk(pt);
-
-      // 필터 적용
-      if (currentFilter === 'danger' && risk !== 'danger') return;
-      if (currentFilter === 'watch' && risk !== 'watch') return;
-      if (currentFilter === 'under' && pt.u === 0) return;
-
-      const color = risk === 'danger' ? '#ef4444' : risk === 'watch' ? '#fbbf24' : '#22c55e';
-      const sz = risk === 'danger' ? 12 : risk === 'watch' ? 9 : 6;
-      const glow = risk === 'danger' ? `box-shadow:0 0 8px ${color}` : risk === 'watch' ? `box-shadow:0 0 4px ${color}` : '';
-      const icon = L.divIcon({
-        html: `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};border:1px solid ${color}88;${glow}"></div>`,
-        iconSize: [sz, sz], iconAnchor: [sz/2, sz/2], className: ''
-      });
-      const mk = L.marker([lat, lng], { icon });
-      mk.bindPopup(`
-        <div class="risk-pill ${risk}">${risk==='danger'?'⚠ 침수위험':risk==='watch'?'⚡ 주의':'✅ 안전'}</div>
-        <div class="popup-title">${pt.b || '승강기 '+pt.n}</div>
-        <div class="popup-row"><span class="popup-label">주소</span><span class="popup-val" style="font-size:.72rem">${pt.a||'-'}</span></div>
-        <div class="popup-row"><span class="popup-label">지하층</span><span class="popup-val">${pt.u||0}층</span></div>
-        <div class="popup-row"><span class="popup-label">지상층</span><span class="popup-val">${pt.t||0}층</span></div>
-        <div class="popup-row"><span class="popup-label">현재 강수량</span><span class="popup-val" style="color:${rain>=30?'#ef4444':rain>=10?'#fbbf24':'#22c55e'}">${rain}mm/h</span></div>
-        <div class="popup-row"><span class="popup-label">승강기 번호</span><span class="popup-val">${pt.n||'-'}</span></div>
-      `, { maxWidth: 260 });
-      clusterLayer.addLayer(mk);
+      layers.rain.addLayer(L.marker([c.lat, c.lng], { icon }));
     }
   });
 }
 
-// ===== RAIN UI =====
+// ── SUPERCLUSTER ──
+function buildSupercluster(points) {
+  sc = new Supercluster({ radius: 60, maxZoom: 16, minZoom: 5 });
+  sc.load(points.map(p => ({
+    type: 'Feature',
+    properties: { ...p },
+    geometry: { type: 'Point', coordinates: [p.lng, p.lat] }
+  })));
+}
+
+function renderClusters() {
+  layers.danger.clearLayers();
+  layers.watch.clearLayers();
+  layers.safe.clearLayers();
+  layers.under.clearLayers();
+  layers.cluster.clearLayers();
+  if (!sc) return;
+
+  const zoom = Math.floor(map.getZoom());
+  const b = map.getBounds();
+  const bbox = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+  const clusters = sc.getClusters(bbox, zoom);
+
+  clusters.forEach(feat => {
+    const [lng, lat] = feat.geometry.coordinates;
+    const props = feat.properties;
+
+    if (props.cluster) {
+      const count = props.point_count;
+      const sz = count > 5000 ? 54 : count > 1000 ? 46 : count > 200 ? 38 : count > 50 ? 32 : 26;
+      const icon = L.divIcon({
+        html: `<div class="cm" style="width:${sz}px;height:${sz}px;background:rgba(30,58,95,.85);font-size:${sz > 40 ? 13 : 11}px;border-color:rgba(59,130,246,.5)">${count > 9999 ? Math.round(count / 1000) + 'k' : count}</div>`,
+        iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2], className: ''
+      });
+      const mk = L.marker([lat, lng], { icon });
+      mk.on('click', () => map.setView([lat, lng], Math.min(sc.getClusterExpansionZoom(props.cluster_id), 16)));
+      layers.cluster.addLayer(mk);
+      return;
+    }
+
+    const pt = props;
+    const { risk, rain } = calcRisk(pt);
+    const hasUnder = pt.u > 0;
+
+    // 각 레이어에 추가
+    if (risk === 'danger' && !layerState.danger) return;
+    if (risk === 'watch' && !layerState.watch) return;
+    if (risk === 'safe' && !layerState.safe) return;
+    if (layerState.under && !hasUnder) return;
+
+    const color = risk === 'danger' ? '#ef4444' : risk === 'watch' ? '#f59e0b' : '#22c55e';
+    const sz = risk === 'danger' ? 14 : risk === 'watch' ? 10 : 7;
+    const glow = risk === 'danger'
+      ? `box-shadow:0 0 0 3px rgba(239,68,68,.2),0 0 10px ${color}`
+      : risk === 'watch' ? `box-shadow:0 0 6px ${color}` : '';
+
+    const icon = L.divIcon({
+      html: risk === 'danger'
+        ? `<div class="pulse-wrap" style="width:${sz+6}px;height:${sz+6}px">
+            <div class="pulse-ring" style="width:${sz+6}px;height:${sz+6}px;background:${color};opacity:.4"></div>
+            <div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};${glow};border:1.5px solid rgba(255,255,255,.3)"></div>
+           </div>`
+        : `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};${glow};border:1px solid ${color}aa"></div>`,
+      iconSize: [sz + (risk === 'danger' ? 6 : 0), sz + (risk === 'danger' ? 6 : 0)],
+      iconAnchor: [(sz + (risk === 'danger' ? 6 : 0)) / 2, (sz + (risk === 'danger' ? 6 : 0)) / 2],
+      className: ''
+    });
+
+    const mk = L.marker([lat, lng], { icon });
+    mk.bindPopup(`
+      <div class="popup-badge ${risk}">${risk === 'danger' ? '⚠ 침수위험' : risk === 'watch' ? '⚡ 주의' : '✅ 안전'}</div>
+      <div class="popup-title">${pt.b || '승강기 ' + pt.n}</div>
+      <div class="popup-row"><span class="popup-label">주소</span><span class="popup-val" style="font-size:.7rem">${pt.a || '-'}</span></div>
+      <div class="popup-row"><span class="popup-label">지하층</span><span class="popup-val">${pt.u || 0}층</span></div>
+      <div class="popup-row"><span class="popup-label">현재 강수</span><span class="popup-val" style="color:${rain >= 30 ? '#ef4444' : rain >= 10 ? '#f59e0b' : '#22c55e'}">${rain}mm/h</span></div>
+      <div class="popup-row"><span class="popup-label">승강기 번호</span><span class="popup-val">${pt.n || '-'}</span></div>
+    `, { maxWidth: 260 });
+
+    const targetLayer = layerState.under ? layers.under : layers[risk];
+    targetLayer.addLayer(mk);
+  });
+}
+
+// ── RAIN UI ──
 function renderRain(data) {
-  const sorted = [...data].sort((a,b) => b.rain - a.rain);
+  const sorted = [...data].sort((a, b) => b.rain - a.rain);
   document.getElementById('rain-list').innerHTML = sorted.map(d => {
-    const rv = d.rain;
-    const cls = rv>=30?'r3':rv>=10?'r2':rv>=1?'r1':'r0';
-    const barW = Math.min(100, rv/30*100);
-    const barC = rv>=30?'#ef4444':rv>=10?'#fbbf24':rv>=1?'#60a5fa':'#1e3a5f';
-    const pty = d.pty === 1 ? '🌧' : d.pty === 4 ? '⛈' : d.pty === 2 ? '🌨' : '';
-    return `<div class="rain-item" onclick="map.setView([${d.lat},${d.lng}],10)">
-      <div style="flex:1">
-        <div style="display:flex;justify-content:space-between">
-          <span class="city-name">${pty} ${d.name}</span>
-          <span class="rain-val ${cls}">${rv > 0 ? rv+'mm/h' : '강수없음'}</span>
-        </div>
-        <div class="rain-bar"><div class="rain-bar-fill" style="width:${barW}%;background:${barC}"></div></div>
+    const mm = d.rain;
+    const cls = mm >= 30 ? 'r3' : mm >= 10 ? 'r2' : mm >= 1 ? 'r1' : 'r0';
+    const barW = Math.min(100, mm / 30 * 100);
+    const barC = mm >= 30 ? 'var(--red)' : mm >= 10 ? 'var(--yellow)' : mm >= 1 ? 'var(--blue-light)' : 'var(--border)';
+    const icon = d.pty === 1 ? '🌧' : d.pty === 4 ? '⛈' : d.pty === 2 ? '🌨' : '☁';
+    return `<div class="rain-card ${cls}" onclick="map.setView([${d.lat},${d.lng}],10)">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="rc-name">${icon} ${d.name}</span>
       </div>
+      <div class="rc-val">${mm > 0 ? mm + '<small style="font-size:.65rem;font-weight:400"> mm/h</small>' : '<span style="font-size:.7rem;color:var(--muted)">강수없음</span>'}</div>
+      <div class="rc-bar"><div class="rc-fill" style="width:${barW}%;background:${barC}"></div></div>
     </div>`;
   }).join('');
 }
 
-// ===== ELEV LIST =====
+// ── ELEV LIST ──
 function renderElevList() {
-  const risky = allPoints
-    .map(p => ({ ...p, ...calcRisk(p) }))
-    .filter(p => p.risk !== 'safe')
-    .sort((a,b) => (b.risk==='danger'?2:b.risk==='watch'?1:0) - (a.risk==='danger'?2:a.risk==='watch'?1:0) || b.rain - a.rain)
-    .slice(0, 100);
-
-  let safe = 0, watch = 0, danger = 0;
+  let safe = 0, watch = 0, danger = 0, underCount = 0;
+  const risky = [];
   allPoints.forEach(p => {
-    const r = calcRisk(p).risk;
-    if (r === 'danger') danger++;
-    else if (r === 'watch') watch++;
+    const { risk, rain } = calcRisk(p);
+    if (p.u > 0) underCount++;
+    if (risk === 'danger') { danger++; risky.push({ ...p, risk, rain }); }
+    else if (risk === 'watch') { watch++; risky.push({ ...p, risk, rain }); }
     else safe++;
   });
+  risky.sort((a, b) => (b.risk === 'danger' ? 2 : 1) - (a.risk === 'danger' ? 2 : 1) || b.rain - a.rain);
 
   document.getElementById('st-total').textContent = allPoints.length.toLocaleString();
   document.getElementById('st-safe').textContent = safe.toLocaleString();
   document.getElementById('st-watch').textContent = watch.toLocaleString();
   document.getElementById('st-danger').textContent = danger.toLocaleString();
+  document.getElementById('cnt-danger').textContent = danger;
+  document.getElementById('cnt-watch').textContent = watch;
+  document.getElementById('cnt-safe').textContent = safe.toLocaleString();
+  document.getElementById('cnt-under').textContent = underCount.toLocaleString();
 
   const banner = document.getElementById('alert-banner');
   if (danger > 0) {
-    banner.className = 'alert-banner danger';
-    banner.style.display = 'block';
+    banner.className = 'alert-banner danger'; banner.style.display = 'block';
     banner.textContent = `⚠ 경보: 침수위험 승강기 ${danger.toLocaleString()}대 — 즉각 점검 필요`;
   } else if (watch > 0) {
-    banner.className = 'alert-banner watch';
-    banner.style.display = 'block';
-    banner.textContent = `⚡ 주의: 강수 또는 지하층 주의 승강기 ${watch.toLocaleString()}대`;
-  } else {
-    banner.style.display = 'none';
-  }
+    banner.className = 'alert-banner watch'; banner.style.display = 'block';
+    banner.textContent = `⚡ 주의: 강수 감지 ${watch.toLocaleString()}대 모니터링 중`;
+  } else { banner.style.display = 'none'; }
 
   if (!risky.length) {
-    document.getElementById('elev-list').innerHTML = '<div style="text-align:center;padding:30px;color:#475569;font-size:.78rem">⚡ 현재 위험·주의 승강기 없음</div>';
+    document.getElementById('elev-list').innerHTML = '<div style="text-align:center;padding:32px 16px;color:var(--muted);font-size:.75rem"><div style="font-size:1.5rem;margin-bottom:8px">✅</div>현재 위험·주의 승강기 없음</div>';
     return;
   }
-
-  document.getElementById('elev-list').innerHTML = risky.map(p =>
+  document.getElementById('elev-list').innerHTML = risky.slice(0, 120).map(p =>
     `<div class="elev-item" onclick="map.setView([${p.lat},${p.lng}],15)">
       <div class="rdot ${p.risk}"></div>
-      <div>
+      <div style="min-width:0">
         <div class="ei-name">${p.b || '승강기 ' + p.n}</div>
         <div class="ei-addr">${p.a}</div>
         <div class="ei-tags">
-          ${p.u > 0 ? `<span class="etag fl">지하${p.u}층</span>` : ''}
-          ${p.rain > 0 ? `<span class="etag rn">${p.rain}mm/h</span>` : ''}
-          ${p.risk === 'danger' ? '<span class="etag dg">⚠침수위험</span>' : ''}
+          ${p.u > 0 ? `<span class="etag fl">B${p.u}</span>` : ''}
+          ${p.rain > 0 ? `<span class="etag rn">${p.rain}㎜</span>` : ''}
+          ${p.risk === 'danger' ? '<span class="etag dg">침수위험</span>' : ''}
         </div>
       </div>
     </div>`
   ).join('');
 }
 
-// ===== FILTER =====
-function setFilter(f, btn) {
-  currentFilter = f;
-  document.querySelectorAll('.mc-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  renderClusters();
-}
-
-// ===== SEARCH =====
+// ── SEARCH ──
 async function doSearch() {
   const addr = document.getElementById('search-input').value.trim();
   if (!addr) return;
   try {
-    const enc = encodeURIComponent(addr);
-    const r = await fetch(`https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${enc}&refine=true&simple=false&format=json&type=parcel&key=${VWORLD_KEY}`);
+    const r = await fetch(`https://api.vworld.kr/req/address?service=address&request=getcoord&version=2.0&crs=epsg:4326&address=${encodeURIComponent(addr)}&refine=true&simple=false&format=json&type=parcel&key=${VWORLD_KEY}`);
     const d = await r.json();
     if (d?.response?.status === 'OK') {
       const pt = d.response.result?.point;
       map.setView([parseFloat(pt.y), parseFloat(pt.x)], 14);
-    } else { alert('주소를 찾을 수 없습니다.'); }
-  } catch(e) { alert('검색 오류'); }
+    } else alert('주소를 찾을 수 없습니다.');
+  } catch { alert('검색 오류'); }
 }
 
-// ===== PROGRESS =====
+// ── PROGRESS / STATUS ──
 function setProgress(pct, txt) {
   document.getElementById('pbar').style.width = pct + '%';
   document.getElementById('ltxt').textContent = txt;
 }
-
-// ===== STATUS =====
 function setStatus(state, txt) {
   const dot = document.getElementById('sdot');
-  dot.className = 'sdot ' + (state === 'ok' ? '' : state === 'loading' ? 'loading' : 'error');
+  dot.className = 'sdot' + (state === 'loading' ? ' loading' : state === 'error' ? ' error' : '');
   document.getElementById('stxt').textContent = txt;
-  if (state === 'ok') document.getElementById('lupd').textContent = '최종: ' + new Date().toLocaleTimeString('ko-KR');
+  if (state === 'ok') document.getElementById('lupd').textContent = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) + ' 기준';
 }
 
-// ===== REFRESH =====
+// ── CACHE ──
+const CACHE_KEY = 'flood_elev_v3';
+const CACHE_TTL = 30 * 60 * 1000;
+function loadLocalCache() {
+  try { const r = localStorage.getItem(CACHE_KEY); if (!r) return null; const { ts, data } = JSON.parse(r); if (Date.now() - ts > CACHE_TTL) { localStorage.removeItem(CACHE_KEY); return null; } return data; } catch { return null; }
+}
+function saveLocalCache(data) {
+  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ ts: Date.now(), data })); } catch {}
+}
+
+async function loadElevators() {
+  const cached = loadLocalCache();
+  if (cached) { allPoints = cached; setProgress(97, `캐시 ${allPoints.length.toLocaleString()}건 즉시 로드`); return; }
+  setProgress(55, '승강기 데이터 수신 중...');
+  try {
+    const r = await fetch(`${WORKER_URL}/elevators?t=${Math.floor(Date.now() / 60000)}`);
+    const data = await r.json();
+    const points = data.points || [];
+    setProgress(90, `${points.length.toLocaleString()}건 수신 완료`);
+    allPoints = points.map(p => ({ n: p.no || '', b: (p.name || '').slice(0, 20), a: (p.addr || '').slice(0, 30), u: p.under || 0, t: 0, lat: p.lat, lng: p.lng })).filter(p => p.lat && p.lng);
+    saveLocalCache(allPoints);
+    setProgress(97, `${allPoints.length.toLocaleString()}건 로드 완료`);
+  } catch { setProgress(97, '데이터 로드 실패 — 지도만 표시'); }
+}
+
+// ── REFRESH ──
 async function refresh() {
   setStatus('loading', '강수 업데이트 중...');
   try {
-    const r = await fetch(`${WORKER_URL}/rain?t=${Date.now()}`);
-    rainData = await r.json();
+    rainData = await (await fetch(`${WORKER_URL}/rain?t=${Date.now()}`)).json();
     renderRain(rainData);
+    renderRainLayer();
     renderElevList();
     renderClusters();
     setStatus('ok', '실시간 연결');
-  } catch(e) { setStatus('error', '연결 오류'); }
+  } catch { setStatus('error', '연결 오류'); }
 }
 
-// ===== MAIN =====
+// ── MAIN ──
 async function init() {
   initMap();
-
-  // 1. 강수 데이터
   setProgress(10, '강수 데이터 수신 중...');
   try {
-    const r = await fetch(`${WORKER_URL}/rain`);
-    rainData = await r.json();
+    rainData = await (await fetch(`${WORKER_URL}/rain`)).json();
     renderRain(rainData);
     setProgress(30, '강수 데이터 완료');
-  } catch(e) {
-    rainData = [];
-    setProgress(30, '강수 데이터 실패 (계속 진행)');
-  }
+  } catch { rainData = []; setProgress(30, '강수 데이터 실패'); }
 
-  // 2. 승강기 전체 데이터 — 직접 전량 로딩
   setProgress(40, '승강기 데이터 수신 중...');
-  await loadElevatorsDirect();
+  await loadElevators();
 
-  // 3. Supercluster 빌드
-  setProgress(95, 'Supercluster 빌드 중...');
+  setProgress(93, 'Supercluster 빌드 중...');
   buildSupercluster(allPoints);
 
-  // 4. 렌더
+  renderRainLayer();
   renderElevList();
   renderClusters();
 
   document.getElementById('loading').classList.add('hidden');
   setStatus('ok', '실시간 연결');
-
-  // 5분마다 강수 자동 갱신
   setInterval(refresh, 5 * 60 * 1000);
 }
 
