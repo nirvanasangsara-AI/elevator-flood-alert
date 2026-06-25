@@ -137,6 +137,19 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 .progress-bar{width:240px;height:2px;background:var(--border);border-radius:1px;overflow:hidden}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),#818cf8);border-radius:1px;transition:.4s;width:0%}
 
+/* 모바일 로딩: 화면 안 막히게 하단 토스트로 */
+@media(max-width:767px){
+  .loading-overlay{
+    inset:auto;bottom:76px;left:12px;right:12px;
+    background:rgba(8,20,42,.96);
+    border:1px solid var(--border2);
+    border-radius:14px;
+    padding:14px 18px;
+    z-index:800;
+  }
+  .progress-bar{width:100%}
+}
+
 /* search bar */
 .map-search{position:absolute;top:14px;left:14px;z-index:800;display:flex;gap:6px}
 .map-search input{
@@ -1005,6 +1018,11 @@ async function refresh() {
 
 // ── MAIN ──
 async function init() {
+  // 방어: 최대 20초 후 무조건 loading 숨김
+  const loadingEl = document.getElementById('loading');
+  const forceHide = setTimeout(() => { if(loadingEl) loadingEl.classList.add('hidden'); }, 20000);
+
+  try {
   initMap();
   setProgress(10, '강수 데이터 수신 중...');
   try {
@@ -1032,9 +1050,13 @@ async function init() {
   renderElevList();
   renderClusters();
   renderHeatmapLayer();
-
+  } catch(e) {
+    console.error('init error:', e);
+  } finally {
+  clearTimeout(forceHide);
   document.getElementById('loading').classList.add('hidden');
   setStatus('ok', '실시간 연결');
+  }
   setInterval(refresh, 5 * 60 * 1000);
 }
 
