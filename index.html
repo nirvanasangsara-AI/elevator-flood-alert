@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BTR 승강기 침수 안전 경보</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/supercluster@8.0.1/dist/supercluster.min.js"></script>
@@ -12,155 +14,213 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#07111f;--panel:#0b1929;--border:#162d45;--border2:#1e3a5f;
-  --text:#e2e8f0;--muted:#64748b;--dim:#334155;
-  --blue:#3b82f6;--blue-light:#60a5fa;
+  --bg:#060f1c;--panel:#08142a;--panel2:#0c1e38;
+  --border:#1a3250;--border2:#1f4068;
+  --text:#e2e8f0;--muted:#4e6a88;--dim:#2a3d56;
+  --blue:#3b82f6;--blue-light:#60a5fa;--blue-dim:rgba(59,130,246,.08);
   --green:#22c55e;--yellow:#f59e0b;--red:#ef4444;--purple:#a855f7;
+  --accent:#2563eb;
 }
-body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;height:100dvh;display:flex;flex-direction:column;overflow:hidden}
+body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:var(--text);height:100vh;display:flex;flex-direction:column;overflow:hidden;-webkit-font-smoothing:antialiased}
 
 /* ── TOPBAR ── */
 .topbar{
-  background:linear-gradient(90deg,#07111f 0%,#0a1d33 100%);
+  background:rgba(6,15,28,.96);
   border-bottom:1px solid var(--border);
-  padding:0 20px;height:54px;display:flex;align-items:center;
+  padding:0 20px;height:52px;display:flex;align-items:center;
   justify-content:space-between;flex-shrink:0;z-index:1000;
-  box-shadow:0 1px 12px rgba(0,0,0,.4)
+  backdrop-filter:blur(12px);
+  box-shadow:0 1px 0 rgba(255,255,255,.04),0 2px 20px rgba(0,0,0,.5)
 }
 .topbar-left{display:flex;align-items:center;gap:12px}
-.logo-icon{font-size:1.4rem}
-.logo-title{font-size:.95rem;font-weight:700;color:var(--blue-light)}
-.logo-sub{font-size:.68rem;color:var(--muted);margin-top:1px}
-.topbar-right{display:flex;align-items:center;gap:12px}
-.status-pill{display:flex;align-items:center;gap:6px;background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.2);border-radius:20px;padding:4px 12px}
-.sdot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);transition:.3s}
-.sdot.loading{background:var(--yellow);box-shadow:0 0 6px var(--yellow);animation:blink 1s infinite}
-.sdot.error{background:var(--red);box-shadow:0 0 6px var(--red)}
-.stxt{font-size:.73rem;color:#94a3b8}
+.logo-icon{
+  width:32px;height:32px;background:linear-gradient(135deg,#1d4ed8,#3b82f6);
+  border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:1rem;flex-shrink:0;box-shadow:0 0 12px rgba(59,130,246,.3)
+}
+.logo-text{}
+.logo-title{font-size:.88rem;font-weight:700;color:#fff;letter-spacing:-.01em;line-height:1.1}
+.logo-sub{font-size:.63rem;color:var(--muted);margin-top:1px;letter-spacing:.02em}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.status-pill{display:flex;align-items:center;gap:6px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.15);border-radius:20px;padding:4px 11px;transition:.3s}
+.status-pill.err{background:rgba(239,68,68,.06);border-color:rgba(239,68,68,.2)}
+.status-pill.load{background:rgba(245,158,11,.06);border-color:rgba(245,158,11,.15)}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--green);transition:.3s}
+.sdot.loading{background:var(--yellow);animation:blink 1s infinite}
+.sdot.error{background:var(--red)}
+.stxt{font-size:.7rem;color:#94a3b8;font-weight:500}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.25}}
-.refresh-btn{background:transparent;border:1px solid var(--border2);color:var(--muted);padding:5px 14px;border-radius:8px;font-size:.72rem;cursor:pointer;transition:.15s}
-.refresh-btn:hover{border-color:var(--blue);color:var(--blue-light)}
+.upd-time{font-size:.65rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.refresh-btn{
+  background:transparent;border:1px solid var(--border2);color:var(--muted);
+  padding:5px 12px;border-radius:7px;font-size:.7rem;cursor:pointer;
+  font-family:inherit;font-weight:500;transition:.15s;letter-spacing:.01em
+}
+.refresh-btn:hover{border-color:var(--blue);color:var(--blue-light);background:var(--blue-dim)}
 
 /* ── ALERT BANNER ── */
-.alert-banner{display:none;padding:7px 20px;font-size:.8rem;font-weight:600;text-align:center;flex-shrink:0;letter-spacing:.02em}
-.alert-banner.watch{background:rgba(245,158,11,.1);border-bottom:1px solid rgba(245,158,11,.25);color:#fcd34d}
-.alert-banner.danger{background:rgba(239,68,68,.1);border-bottom:1px solid rgba(239,68,68,.3);color:#fca5a5;animation:flash 2s infinite}
+.alert-banner{display:none;padding:6px 20px;font-size:.75rem;font-weight:600;text-align:center;flex-shrink:0;letter-spacing:.01em}
+.alert-banner.watch{background:rgba(245,158,11,.08);border-bottom:1px solid rgba(245,158,11,.2);color:#fcd34d}
+.alert-banner.danger{background:rgba(239,68,68,.08);border-bottom:1px solid rgba(239,68,68,.25);color:#fca5a5;animation:flash 2.5s infinite}
 @keyframes flash{0%,100%{opacity:1}50%{opacity:.7}}
 
 /* ── LAYOUT ── */
 .layout{display:flex;flex:1;overflow:hidden}
 
 /* ── SIDEBAR ── */
-.sidebar{width:310px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.sidebar{width:300px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
 .sb-section{border-bottom:1px solid var(--border);flex-shrink:0}
-.sb-hdr{padding:9px 16px;font-size:.68rem;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
+.sb-hdr{padding:8px 14px;font-size:.62rem;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
 
-/* stats */
-.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--border)}
-.stat-box{background:var(--panel);padding:10px 8px;text-align:center;cursor:default}
-.sv{font-size:1.3rem;font-weight:800;line-height:1.1}
-.sl{font-size:.6rem;color:var(--muted);margin-top:3px}
-.sv.total{color:var(--blue-light)}.sv.danger{color:var(--red)}.sv.watch{color:var(--yellow)}.sv.safe{color:var(--green)}
+/* stats 2x2 card */
+.stats-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;padding:10px 12px}
+.stat-box{
+  background:rgba(255,255,255,.025);border:1px solid var(--border);
+  border-radius:10px;padding:10px 12px;cursor:default;transition:.2s;position:relative;overflow:hidden
+}
+.stat-box::before{content:'';position:absolute;inset:0;opacity:0;transition:.2s;background:rgba(255,255,255,.03)}
+.stat-box:hover::before{opacity:1}
+.sv{font-size:1.55rem;font-weight:900;line-height:1;letter-spacing:-.03em}
+.sl{font-size:.6rem;color:var(--muted);margin-top:5px;font-weight:600;letter-spacing:.06em;text-transform:uppercase}
+.sv.total{color:var(--blue-light)}
+.sv.danger{color:var(--red)}
+.sv.watch{color:var(--yellow)}
+.sv.safe{color:var(--green)}
+.stat-box.total-box{border-color:rgba(96,165,250,.2)}
+.stat-box.danger-box{border-color:rgba(239,68,68,.2)}
+.stat-box.watch-box{border-color:rgba(245,158,11,.15)}
+.stat-box.safe-box{border-color:rgba(34,197,94,.15)}
 
 /* rain panel */
-.rain-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:10px 14px}
-.rain-card{background:#0a1929;border:1px solid var(--border);border-radius:8px;padding:8px 10px;cursor:pointer;transition:.15s;position:relative;overflow:hidden}
-.rain-card:hover{border-color:var(--blue);background:#0d1f35}
-.rain-card.r3{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.05)}
-.rain-card.r2{border-color:rgba(245,158,11,.3);background:rgba(245,158,11,.04)}
-.rain-card.r1{border-color:rgba(96,165,250,.25)}
-.rc-name{font-size:.78rem;font-weight:600;color:#cbd5e1}
-.rc-val{font-size:.85rem;font-weight:800;margin-top:2px}
-.rc-bar{height:2px;background:var(--border);border-radius:1px;margin-top:5px;overflow:hidden}
-.rc-fill{height:100%;border-radius:1px;transition:.5s}
+.rain-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:8px 12px}
+.rain-card{
+  background:rgba(255,255,255,.02);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;cursor:pointer;transition:.15s;position:relative;overflow:hidden
+}
+.rain-card:hover{border-color:rgba(96,165,250,.3);background:rgba(96,165,250,.03)}
+.rain-card.r3{border-color:rgba(239,68,68,.3);background:rgba(239,68,68,.04)}
+.rain-card.r2{border-color:rgba(245,158,11,.25);background:rgba(245,158,11,.03)}
+.rain-card.r1{border-color:rgba(96,165,250,.2);background:rgba(96,165,250,.02)}
+.rc-name{font-size:.72rem;font-weight:600;color:#94a3b8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rc-val{font-size:.82rem;font-weight:800;margin-top:3px;letter-spacing:-.01em}
+.rc-bar{height:2px;background:rgba(255,255,255,.06);border-radius:1px;margin-top:6px;overflow:hidden}
+.rc-fill{height:100%;border-radius:1px;transition:.6s}
 .r0 .rc-val{color:var(--muted)} .r1 .rc-val{color:var(--blue-light)} .r2 .rc-val{color:var(--yellow)} .r3 .rc-val{color:var(--red)}
 
 /* elev list */
 .elev-list{flex:1;overflow-y:auto}
 .elev-list::-webkit-scrollbar{width:3px}
 .elev-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
-.elev-item{padding:8px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:flex-start;gap:10px;transition:.1s}
-.elev-item:hover{background:#0d1f35}
-.rdot{width:8px;height:8px;border-radius:50%;flex-shrink:0;margin-top:5px}
-.rdot.safe{background:var(--green)}.rdot.watch{background:var(--yellow);box-shadow:0 0 5px var(--yellow)}
-.rdot.danger{background:var(--red);box-shadow:0 0 8px var(--red);animation:blink 1.5s infinite}
-.ei-name{font-size:.8rem;font-weight:600;color:var(--text);margin-bottom:2px}
-.ei-addr{font-size:.69rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px;margin-bottom:4px}
+.elev-item{padding:8px 14px;border-bottom:1px solid rgba(26,50,80,.6);cursor:pointer;display:flex;align-items:flex-start;gap:10px;transition:.1s}
+.elev-item:hover{background:rgba(255,255,255,.02)}
+.rdot{width:7px;height:7px;border-radius:50%;flex-shrink:0;margin-top:5px}
+.rdot.safe{background:var(--green)}.rdot.watch{background:var(--yellow);box-shadow:0 0 4px var(--yellow)}
+.rdot.danger{background:var(--red);box-shadow:0 0 7px var(--red);animation:blink 1.5s infinite}
+.ei-name{font-size:.77rem;font-weight:600;color:var(--text);margin-bottom:2px;line-height:1.3}
+.ei-addr{font-size:.67rem;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;margin-bottom:4px}
 .ei-tags{display:flex;gap:3px;flex-wrap:wrap}
-.etag{font-size:.6rem;padding:1px 6px;border-radius:4px;font-weight:700}
-.etag.fl{background:rgba(96,165,250,.1);color:var(--blue-light);border:1px solid rgba(96,165,250,.2)}
-.etag.rn{background:rgba(245,158,11,.1);color:var(--yellow);border:1px solid rgba(245,158,11,.2)}
-.etag.dg{background:rgba(239,68,68,.1);color:#fca5a5;border:1px solid rgba(239,68,68,.25)}
+.etag{font-size:.58rem;padding:1px 6px;border-radius:4px;font-weight:700;letter-spacing:.02em}
+.etag.fl{background:rgba(96,165,250,.08);color:var(--blue-light);border:1px solid rgba(96,165,250,.18)}
+.etag.rn{background:rgba(245,158,11,.08);color:var(--yellow);border:1px solid rgba(245,158,11,.18)}
+.etag.dg{background:rgba(239,68,68,.08);color:#fca5a5;border:1px solid rgba(239,68,68,.22)}
 
 /* ── MAP ── */
 .map-wrap{flex:1;position:relative}
 #map{width:100%;height:100%}
 
 /* loading overlay */
-.loading-overlay{position:absolute;inset:0;background:rgba(7,17,31,.85);display:flex;align-items:center;justify-content:center;z-index:2000;flex-direction:column;gap:16px;backdrop-filter:blur(3px)}
+.loading-overlay{position:absolute;inset:0;background:rgba(6,15,28,.9);display:flex;align-items:center;justify-content:center;z-index:2000;flex-direction:column;gap:16px;backdrop-filter:blur(4px)}
 .loading-overlay.hidden{display:none}
-.spinner{width:36px;height:36px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite}
+.spinner{width:32px;height:32px;border:2px solid var(--border2);border-top-color:var(--blue);border-radius:50%;animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
-.loading-txt{font-size:.8rem;color:var(--muted)}
-.progress-bar{width:260px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
-.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),#818cf8);border-radius:2px;transition:.4s;width:0%}
+.loading-txt{font-size:.75rem;color:var(--muted);font-weight:500}
+.progress-bar{width:240px;height:2px;background:var(--border);border-radius:1px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),#818cf8);border-radius:1px;transition:.4s;width:0%}
 
 /* search bar */
 .map-search{position:absolute;top:14px;left:14px;z-index:800;display:flex;gap:6px}
-.map-search input{background:rgba(11,25,41,.92);border:1px solid var(--border2);color:var(--text);padding:8px 14px;border-radius:8px;font-size:.78rem;width:210px;backdrop-filter:blur(6px);outline:none;transition:.15s}
-.map-search input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+.map-search input{
+  background:rgba(8,20,42,.95);border:1px solid var(--border2);color:var(--text);
+  padding:8px 14px;border-radius:9px;font-size:.76rem;width:200px;
+  backdrop-filter:blur(8px);outline:none;transition:.15s;font-family:inherit;
+  box-shadow:0 2px 12px rgba(0,0,0,.4)
+}
+.map-search input:focus{border-color:var(--blue);box-shadow:0 0 0 2px rgba(59,130,246,.12),0 2px 12px rgba(0,0,0,.4)}
 .map-search input::placeholder{color:var(--muted)}
-.map-search button{background:rgba(30,58,95,.8);border:1px solid var(--blue);color:var(--blue-light);padding:8px 12px;border-radius:8px;font-size:.78rem;cursor:pointer;backdrop-filter:blur(6px);transition:.15s}
-.map-search button:hover{background:rgba(59,130,246,.2)}
+.map-search button{
+  background:rgba(37,99,235,.85);border:1px solid rgba(59,130,246,.4);
+  color:#fff;padding:8px 12px;border-radius:9px;font-size:.76rem;
+  cursor:pointer;backdrop-filter:blur(8px);transition:.15s;font-family:inherit;font-weight:500;
+  box-shadow:0 2px 12px rgba(0,0,0,.4)
+}
+.map-search button:hover{background:rgba(37,99,235,1)}
 
 /* ── LAYER PANEL ── */
 .layer-panel{
   position:absolute;top:14px;right:14px;z-index:800;
-  background:rgba(11,25,41,.94);border:1px solid var(--border2);
-  border-radius:12px;padding:12px 14px;min-width:190px;
-  backdrop-filter:blur(8px);box-shadow:0 4px 24px rgba(0,0,0,.5)
+  background:rgba(8,20,42,.96);border:1px solid var(--border2);
+  border-radius:14px;padding:12px 13px;min-width:182px;
+  backdrop-filter:blur(12px);box-shadow:0 4px 32px rgba(0,0,0,.6),0 1px 0 rgba(255,255,255,.05) inset
 }
-.lp-title{font-size:.65rem;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px}
-.layer-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);gap:10px}
-.layer-row:last-child{border:none}
-.layer-info{display:flex;align-items:center;gap:8px}
-.layer-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
-.layer-name{font-size:.76rem;color:#94a3b8;font-weight:500}
-.layer-count{font-size:.65rem;color:var(--muted);background:rgba(255,255,255,.05);padding:1px 6px;border-radius:8px}
+.lp-title{
+  font-size:.6rem;font-weight:700;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase;margin-bottom:10px;
+  display:flex;align-items:center;gap:6px;padding-bottom:8px;
+  border-bottom:1px solid var(--border)
+}
+.layer-row{display:flex;align-items:center;justify-content:space-between;padding:4px 0;gap:10px}
+.layer-row+.layer-row{border-top:1px solid rgba(26,50,80,.4)}
+.layer-info{display:flex;align-items:center;gap:7px;min-width:0}
+.layer-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.layer-name{font-size:.72rem;color:#7a95b0;font-weight:500;white-space:nowrap}
+.layer-count{font-size:.6rem;color:var(--muted);background:rgba(255,255,255,.04);padding:1px 5px;border-radius:6px;font-variant-numeric:tabular-nums}
 /* toggle switch */
-.toggle{position:relative;width:34px;height:18px;flex-shrink:0}
+.toggle{position:relative;width:30px;height:16px;flex-shrink:0}
 .toggle input{opacity:0;width:0;height:0}
-.tslider{position:absolute;inset:0;background:var(--border2);border-radius:9px;transition:.25s;cursor:pointer}
-.tslider:before{content:'';position:absolute;width:12px;height:12px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.25s}
-.toggle input:checked+.tslider{background:var(--blue)}
-.toggle input:checked+.tslider:before{transform:translateX(16px)}
+.tslider{position:absolute;inset:0;background:rgba(255,255,255,.1);border-radius:8px;transition:.2s;cursor:pointer;border:1px solid rgba(255,255,255,.08)}
+.tslider:before{content:'';position:absolute;width:10px;height:10px;left:2px;top:2px;background:rgba(255,255,255,.5);border-radius:50%;transition:.2s}
+.toggle input:checked+.tslider{background:var(--accent);border-color:rgba(59,130,246,.4)}
+.toggle input:checked+.tslider:before{transform:translateX(14px);background:#fff}
 
 /* legend */
-.map-legend{position:absolute;bottom:28px;right:14px;z-index:800;background:rgba(11,25,41,.92);border:1px solid var(--border2);border-radius:10px;padding:10px 14px;font-size:.7rem;backdrop-filter:blur(6px)}
-.map-legend h4{color:var(--muted);font-size:.63rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:8px}
-.leg-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;color:#94a3b8}
+.map-legend{
+  position:absolute;bottom:28px;right:14px;z-index:800;
+  background:rgba(8,20,42,.95);border:1px solid var(--border2);
+  border-radius:10px;padding:10px 13px;font-size:.68rem;
+  backdrop-filter:blur(8px);box-shadow:0 2px 16px rgba(0,0,0,.4)
+}
+.map-legend h4{color:var(--muted);font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;margin-bottom:7px;font-weight:700}
+.leg-row{display:flex;align-items:center;gap:7px;margin-bottom:5px;color:#7a95b0;font-size:.67rem}
 .leg-row:last-child{margin:0}
-.leg-icon{width:12px;height:12px;border-radius:50%;flex-shrink:0}
+.leg-icon{width:10px;height:10px;border-radius:50%;flex-shrink:0}
 
 /* Leaflet dark popup */
-.leaflet-popup-content-wrapper{background:#0b1929;border:1px solid var(--border2);color:var(--text);border-radius:10px;box-shadow:0 6px 24px rgba(0,0,0,.6)}
-.leaflet-popup-tip{background:#0b1929}
+.leaflet-popup-content-wrapper{
+  background:rgba(8,20,42,.98);border:1px solid var(--border2);
+  color:var(--text);border-radius:12px;
+  box-shadow:0 8px 32px rgba(0,0,0,.7);backdrop-filter:blur(8px)
+}
+.leaflet-popup-tip{background:#0d2040}
 .leaflet-popup-content{margin:14px 16px;min-width:200px}
-.popup-badge{display:inline-block;padding:3px 10px;border-radius:10px;font-size:.68rem;font-weight:700;margin-bottom:10px}
-.popup-badge.safe{background:rgba(34,197,94,.12);color:var(--green);border:1px solid rgba(34,197,94,.3)}
-.popup-badge.watch{background:rgba(245,158,11,.12);color:var(--yellow);border:1px solid rgba(245,158,11,.3)}
-.popup-badge.danger{background:rgba(239,68,68,.12);color:#fca5a5;border:1px solid rgba(239,68,68,.35)}
-.popup-title{font-size:.88rem;font-weight:700;margin-bottom:8px}
-.popup-row{display:flex;justify-content:space-between;font-size:.75rem;padding:4px 0;border-bottom:1px solid var(--border);gap:14px}
+.popup-badge{display:inline-block;padding:3px 10px;border-radius:8px;font-size:.65rem;font-weight:700;margin-bottom:10px;letter-spacing:.03em}
+.popup-badge.safe{background:rgba(34,197,94,.1);color:var(--green);border:1px solid rgba(34,197,94,.25)}
+.popup-badge.watch{background:rgba(245,158,11,.1);color:var(--yellow);border:1px solid rgba(245,158,11,.25)}
+.popup-badge.danger{background:rgba(239,68,68,.1);color:#fca5a5;border:1px solid rgba(239,68,68,.3)}
+.popup-title{font-size:.85rem;font-weight:700;margin-bottom:9px;line-height:1.3;color:#fff}
+.popup-row{display:flex;justify-content:space-between;font-size:.72rem;padding:4px 0;border-bottom:1px solid rgba(26,50,80,.6);gap:14px}
 .popup-row:last-child{border:none}
 .popup-label{color:var(--muted)}.popup-val{font-weight:600;text-align:right}
 
 /* cluster */
-.cm{display:flex;align-items:center;justify-content:center;border-radius:50%;font-weight:800;color:#fff;border:2px solid rgba(255,255,255,.2);box-shadow:0 2px 10px rgba(0,0,0,.5);transition:.15s}
-/* rain circle */
-.rain-circle{border-radius:50%;pointer-events:none}
+.cm{
+  display:flex;align-items:center;justify-content:center;border-radius:50%;
+  font-weight:800;color:#fff;font-family:'Inter',sans-serif;
+  border:1.5px solid rgba(59,130,246,.35);
+  box-shadow:0 2px 12px rgba(0,0,0,.5),0 0 0 4px rgba(59,130,246,.08);
+  transition:.15s;letter-spacing:-.02em
+}
 /* pulse */
-@keyframes pulse-ring{0%{transform:scale(.9);opacity:.6}70%{transform:scale(1.5);opacity:0}100%{transform:scale(1.5);opacity:0}}
+@keyframes pulse-ring{0%{transform:scale(.8);opacity:.7}70%{transform:scale(1.6);opacity:0}100%{transform:scale(1.6);opacity:0}}
 .pulse-wrap{position:relative;display:flex;align-items:center;justify-content:center}
 .pulse-ring{position:absolute;border-radius:50%;animation:pulse-ring 2s ease-out infinite}
 
@@ -236,17 +296,17 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 <div class="topbar">
   <div class="topbar-left">
     <div class="logo-icon">🌊</div>
-    <div>
+    <div class="logo-text">
       <div class="logo-title">BTR 승강기 침수 안전 경보</div>
-      <div class="logo-sub">Elevator Flood Risk Monitoring · 실시간 강수·침수위험 감시</div>
+      <div class="logo-sub">실시간 강수 · 침수위험 모니터링 시스템</div>
     </div>
   </div>
   <div class="topbar-right">
-    <div class="status-pill">
+    <div class="status-pill" id="status-pill">
       <div class="sdot loading" id="sdot"></div>
       <span class="stxt" id="stxt">로딩 중...</span>
     </div>
-    <span id="lupd" style="font-size:.68rem;color:var(--muted)"></span>
+    <span class="upd-time" id="lupd"></span>
     <button class="refresh-btn" onclick="refresh()">↻ 갱신</button>
   </div>
 </div>
@@ -267,23 +327,35 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
     <div class="sb-section">
       <div class="stats-grid">
-        <div class="stat-box"><div class="sv total" id="st-total">-</div><div class="sl">전체</div></div>
-        <div class="stat-box"><div class="sv danger" id="st-danger">0</div><div class="sl">🔴 위험</div></div>
-        <div class="stat-box"><div class="sv watch" id="st-watch">0</div><div class="sl">🟡 주의</div></div>
-        <div class="stat-box"><div class="sv safe" id="st-safe">-</div><div class="sl">🟢 안전</div></div>
+        <div class="stat-box total-box">
+          <div class="sv total" id="st-total">—</div>
+          <div class="sl">전체 승강기</div>
+        </div>
+        <div class="stat-box danger-box">
+          <div class="sv danger" id="st-danger">0</div>
+          <div class="sl">🔴 침수위험</div>
+        </div>
+        <div class="stat-box watch-box">
+          <div class="sv watch" id="st-watch">0</div>
+          <div class="sl">🟡 주의</div>
+        </div>
+        <div class="stat-box safe-box">
+          <div class="sv safe" id="st-safe">—</div>
+          <div class="sl">🟢 안전</div>
+        </div>
       </div>
     </div>
 
     <div class="sb-section">
       <div class="sb-hdr">🌧 지역별 강수량</div>
       <div class="rain-grid" id="rain-list">
-        <div style="grid-column:1/-1;text-align:center;padding:12px;color:var(--muted);font-size:.75rem">로딩 중...</div>
+        <div style="grid-column:1/-1;text-align:center;padding:12px;color:var(--muted);font-size:.72rem">로딩 중...</div>
       </div>
     </div>
 
     <div class="sb-hdr">⚠️ 위험·주의 승강기</div>
     <div class="elev-list" id="elev-list">
-      <div style="text-align:center;padding:30px;color:var(--muted);font-size:.75rem">데이터 로딩 중...</div>
+      <div style="text-align:center;padding:28px;color:var(--muted);font-size:.72rem">데이터 로딩 중...</div>
     </div>
 
   </div>
@@ -316,11 +388,11 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
     <!-- 레이어 토글 패널 -->
     <div class="layer-panel">
-      <div class="lp-title">🗂 레이어</div>
+      <div class="lp-title">🗂 레이어 제어</div>
 
       <div class="layer-row">
         <div class="layer-info">
-          <div class="layer-dot" style="background:rgba(59,130,246,.7);box-shadow:0 0 6px rgba(59,130,246,.5)"></div>
+          <div class="layer-dot" style="background:rgba(59,130,246,.8);box-shadow:0 0 5px rgba(59,130,246,.4)"></div>
           <span class="layer-name">강수 범위</span>
         </div>
         <label class="toggle"><input type="checkbox" id="lyr-rain" checked onchange="toggleLayer('rain')"><span class="tslider"></span></label>
@@ -328,7 +400,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
       <div class="layer-row">
         <div class="layer-info">
-          <div class="layer-dot" style="background:#06b6d4"></div>
+          <div class="layer-dot" style="background:#06b6d4;box-shadow:0 0 4px #06b6d4"></div>
           <span class="layer-name">☁ 위성·레이더</span>
         </div>
         <label class="toggle"><input type="checkbox" id="lyr-radar" onchange="toggleLayer('radar')"><span class="tslider"></span></label>
@@ -336,24 +408,24 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
       <div class="layer-row">
         <div class="layer-info">
-          <div class="layer-dot" style="background:#f97316;box-shadow:0 0 6px #f97316"></div>
-          <span class="layer-name">기온 (시군구)</span>
+          <div class="layer-dot" style="background:#f97316;box-shadow:0 0 5px rgba(249,115,22,.5)"></div>
+          <span class="layer-name">🌡 기온</span>
         </div>
         <label class="toggle"><input type="checkbox" id="lyr-temp" onchange="toggleLayer('temp')"><span class="tslider"></span></label>
       </div>
 
       <div class="layer-row">
         <div class="layer-info">
-          <div class="layer-dot" style="background:#818cf8;box-shadow:0 0 4px #818cf8"></div>
-          <span class="layer-name">풍속</span>
+          <div class="layer-dot" style="background:#818cf8;box-shadow:0 0 4px rgba(129,140,248,.4)"></div>
+          <span class="layer-name">💨 풍속</span>
         </div>
         <label class="toggle"><input type="checkbox" id="lyr-wind" onchange="toggleLayer('wind')"><span class="tslider"></span></label>
       </div>
 
       <div class="layer-row">
         <div class="layer-info">
-          <div class="layer-dot" style="background:#e879f9;box-shadow:0 0 6px #e879f9"></div>
-          <span class="layer-name">태풍</span>
+          <div class="layer-dot" style="background:#e879f9;box-shadow:0 0 5px rgba(232,121,249,.4)"></div>
+          <span class="layer-name">🌀 태풍</span>
           <span class="layer-count" id="cnt-typhoon">0</span>
         </div>
         <label class="toggle"><input type="checkbox" id="lyr-typhoon" checked onchange="toggleLayer('typhoon')"><span class="tslider"></span></label>
@@ -361,7 +433,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
       <div class="layer-row">
         <div class="layer-info">
-          <div class="layer-dot" style="background:#f59e0b;box-shadow:0 0 5px #f59e0b"></div>
+          <div class="layer-dot" style="background:#f59e0b;box-shadow:0 0 4px rgba(245,158,11,.4)"></div>
           <span class="layer-name">🌏 지진</span>
           <span class="layer-count" id="cnt-quake">0</span>
         </div>
@@ -370,15 +442,15 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
       <div class="layer-row">
         <div class="layer-info">
-          <div class="layer-dot" style="background:linear-gradient(135deg,#ef4444,#f97316,#22c55e,#3b82f6);border-radius:3px"></div>
-          <span class="layer-name">승강기 밀도</span>
+          <div class="layer-dot" style="background:linear-gradient(135deg,#312e81,#3b82f6,#22c55e,#dc2626);border-radius:3px"></div>
+          <span class="layer-name">🔥 승강기 밀도</span>
         </div>
         <label class="toggle"><input type="checkbox" id="lyr-heatmap" onchange="toggleLayer('heatmap')"><span class="tslider"></span></label>
       </div>
 
       <div class="layer-row">
         <div class="layer-info">
-          <div class="layer-dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></div>
+          <div class="layer-dot" style="background:var(--red);box-shadow:0 0 5px var(--red)"></div>
           <span class="layer-name">침수 위험</span>
           <span class="layer-count" id="cnt-danger">0</span>
         </div>
@@ -387,7 +459,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
       <div class="layer-row">
         <div class="layer-info">
-          <div class="layer-dot" style="background:var(--yellow);box-shadow:0 0 4px var(--yellow)"></div>
+          <div class="layer-dot" style="background:var(--yellow);box-shadow:0 0 4px rgba(245,158,11,.4)"></div>
           <span class="layer-name">주의</span>
           <span class="layer-count" id="cnt-watch">0</span>
         </div>
@@ -407,7 +479,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
         <div class="layer-info">
           <div class="layer-dot" style="background:var(--blue-light);border-radius:3px"></div>
           <span class="layer-name">지하층 있음</span>
-          <span class="layer-count" id="cnt-under">-</span>
+          <span class="layer-count" id="cnt-under">—</span>
         </div>
         <label class="toggle"><input type="checkbox" id="lyr-under" onchange="toggleLayer('under')"><span class="tslider"></span></label>
       </div>
@@ -416,10 +488,10 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
     <!-- 범례 -->
     <div class="map-legend">
       <h4>범례</h4>
-      <div class="leg-row"><div class="leg-icon" style="background:var(--red);box-shadow:0 0 5px var(--red)"></div>침수위험 — 30mm/h↑ + 지하층</div>
+      <div class="leg-row"><div class="leg-icon" style="background:var(--red);box-shadow:0 0 4px var(--red)"></div>침수위험 — 30mm/h↑ + 지하층</div>
       <div class="leg-row"><div class="leg-icon" style="background:var(--yellow)"></div>주의 — 10mm/h↑ 또는 지하층+강수</div>
       <div class="leg-row"><div class="leg-icon" style="background:var(--green)"></div>안전</div>
-      <div class="leg-row"><div class="leg-icon" style="background:rgba(59,130,246,.5);border:1px solid var(--blue)"></div>강수 반경 (반경=강도)</div>
+      <div class="leg-row"><div class="leg-icon" style="background:rgba(59,130,246,.5);border:1px solid var(--blue)"></div>강수 범위 (반경=강도)</div>
     </div>
 
   </div>
@@ -449,7 +521,6 @@ function initMap() {
     attribution: '©OpenStreetMap ©CARTO', maxZoom: 19, subdomains: 'abcd'
   }).addTo(map);
   L.control.zoom({ position: 'bottomright' }).addTo(map);
-  // 레이어 순서: rain 아래, 나머지 위
   layers.rain.addTo(map);
   layers.radar.addTo(map);
   layers.temp.addTo(map);
@@ -501,7 +572,8 @@ function calcRisk(pt) {
   else if (rain >= 10 || (rain >= 3 && hasUnder)) risk = 'watch';
   return { risk, rain };
 }
-// ── RADAR LAYER (RainViewer — 구름·강수 애니메이션) ──
+
+// ── RADAR LAYER — crossfade, 5초 전환 ──
 async function renderRadarLayer() {
   layers.radar.clearLayers();
   if (radarTimer) { clearInterval(radarTimer); radarTimer = null; }
@@ -512,30 +584,41 @@ async function renderRadarLayer() {
   try {
     const r = await fetch('https://api.rainviewer.com/public/weather-maps.json');
     const d = await r.json();
-    radarFrames = (d.radar?.past || []).slice(-6); // 최근 6프레임 (60분)
+    radarFrames = (d.radar?.past || []).slice(-6);
     if (!radarFrames.length) return;
     radarIdx = radarFrames.length - 1;
 
     function showFrame(i) {
-      radarTiles.forEach(t => { try { map.removeLayer(t); } catch{} });
+      const oldTiles = [...radarTiles];
       radarTiles = [];
       const frame = radarFrames[i];
       if (!frame) return;
+
+      // 새 타일 opacity 0 → 로드 후 fade in
       const tile = L.tileLayer(
         `https://tilecache.rainviewer.com${frame.path}/512/{z}/{x}/{y}/4/1_1.png`,
-        { opacity: 0.55, attribution: '©RainViewer', maxZoom: 18, tileSize: 512, zoomOffset: -1 }
+        { opacity: 0, attribution: '©RainViewer', maxZoom: 18, tileSize: 512, zoomOffset: -1 }
       );
       tile.addTo(map);
       radarTiles.push(tile);
+
+      // 50ms 후 fade in 시작
+      setTimeout(() => {
+        tile.setOpacity(0.55);
+        // 600ms crossfade 완료 후 이전 타일 제거
+        setTimeout(() => {
+          oldTiles.forEach(t => { try { map.removeLayer(t); } catch{} });
+        }, 700);
+      }, 60);
     }
 
     showFrame(radarIdx);
-    // 10초마다 프레임 순환 (애니메이션)
+    // 5초마다 프레임 순환
     radarTimer = setInterval(() => {
       if (!layerState.radar) { clearInterval(radarTimer); return; }
       radarIdx = (radarIdx + 1) % radarFrames.length;
       showFrame(radarIdx);
-    }, 1500);
+    }, 5000);
   } catch(e) { console.warn('RainViewer 로드 실패', e); }
 }
 
@@ -551,7 +634,7 @@ function renderHeatmapLayer() {
   heatLayer.addTo(map);
 }
 
-// ── TEMP LAYER (기온 — 시군구 단위 choropleth 근사) ──
+// ── TEMP LAYER ──
 function renderTempLayer() {
   layers.temp.clearLayers();
   if (!layerState.temp || !weatherData?.stations) return;
@@ -559,14 +642,12 @@ function renderTempLayer() {
     if (s.ta == null) return;
     const ta = s.ta;
     const color = ta >= 35 ? '#dc2626' : ta >= 30 ? '#ea580c' : ta >= 25 ? '#d97706' : ta >= 20 ? '#16a34a' : ta >= 15 ? '#0284c7' : ta >= 10 ? '#4f46e5' : '#7e22ce';
-    // 시군구 근사: 관측소 기준 대형 반경 + 저투명도 채우기
     L.circle([s.lat, s.lng], {
       radius: 55000, color, fillColor: color,
-      fillOpacity: 0.12, opacity: 0, weight: 0,
+      fillOpacity: 0.1, opacity: 0, weight: 0,
     }).addTo(layers.temp);
-    // 라벨 — 작고 선명하게
     const icon = L.divIcon({
-      html: `<div style="background:${color}18;border:1.5px solid ${color}88;border-radius:5px;padding:2px 7px;font-size:.71rem;font-weight:800;color:${color};white-space:nowrap;backdrop-filter:blur(2px)">${ta.toFixed(1)}°</div>`,
+      html: `<div style="background:rgba(8,20,42,.9);border:1.5px solid ${color}99;border-radius:6px;padding:2px 7px;font-size:.68rem;font-weight:800;color:${color};white-space:nowrap;font-family:Inter,sans-serif;letter-spacing:-.01em">${ta.toFixed(1)}°</div>`,
       iconSize: [48, 20], iconAnchor: [24, 10], className: ''
     });
     L.marker([s.lat, s.lng], { icon })
@@ -575,7 +656,7 @@ function renderTempLayer() {
   });
 }
 
-// ── WIND LAYER (풍속 벡터) ──
+// ── WIND LAYER ──
 function renderWindLayer() {
   layers.wind.clearLayers();
   if (!layerState.wind || !weatherData?.stations) return;
@@ -587,13 +668,13 @@ function renderWindLayer() {
     const color = ws >= 14 ? '#ef4444' : ws >= 9 ? '#f97316' : ws >= 5 ? '#f59e0b' : '#818cf8';
     const arrowDeg = (wd + 180) % 360;
     const dirLabel = dirs[Math.round(wd / 22.5) % 16];
-    const sz = Math.min(28, 14 + beaufort * 2);
+    const sz = Math.min(26, 13 + beaufort * 2);
     const icon = L.divIcon({
-      html: `<div style="display:flex;flex-direction:column;align-items:center;gap:1px">
+      html: `<div style="display:flex;flex-direction:column;align-items:center;gap:1px;font-family:Inter,sans-serif">
         <div style="font-size:${sz}px;line-height:1;transform:rotate(${arrowDeg}deg);filter:drop-shadow(0 0 3px ${color})">↑</div>
-        <div style="background:rgba(7,17,31,.88);border:1px solid ${color}88;border-radius:4px;padding:1px 5px;font-size:.65rem;font-weight:700;color:${color}">${ws}m/s</div>
+        <div style="background:rgba(8,20,42,.92);border:1px solid ${color}88;border-radius:4px;padding:1px 5px;font-size:.62rem;font-weight:700;color:${color}">${ws}m/s</div>
       </div>`,
-      iconSize: [44, 38], iconAnchor: [22, 19], className: ''
+      iconSize: [44, 36], iconAnchor: [22, 18], className: ''
     });
     L.marker([s.lat, s.lng], { icon })
       .bindPopup(`<b>${s.name}</b><br>💨 ${ws}m/s &nbsp; ${dirLabel} (${wd}°)<br>Beaufort ${beaufort}`)
@@ -615,10 +696,9 @@ function renderTyphoonLayer() {
   }
 }
 
-// ── QUAKE LAYER (USGS 실시간 지진) ──
+// ── QUAKE LAYER ──
 async function loadAndRenderQuake() {
   try {
-    // 최근 7일, M2.5 이상, 한반도 주변 bbox
     const r = await fetch('https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&starttime=now-7days&minmagnitude=2.5&minlatitude=33&maxlatitude=43&minlongitude=124&maxlongitude=132&orderby=time&limit=50');
     const d = await r.json();
     quakeData = d.features || [];
@@ -635,17 +715,16 @@ function renderQuakeLayer() {
     const mag = f.properties.mag;
     const place = f.properties.place || '';
     const time = new Date(f.properties.time).toLocaleString('ko-KR');
-    // 지진은 원형이 적합 — 규모에 비례
     const r = Math.pow(10, mag * 0.5) * 2000;
     const color = mag >= 5 ? '#ef4444' : mag >= 4 ? '#f97316' : mag >= 3 ? '#f59e0b' : '#facc15';
     L.circle([lat, lng], {
       radius: r, color, fillColor: color,
-      fillOpacity: 0.15, opacity: 0.6, weight: 1.5,
+      fillOpacity: 0.12, opacity: 0.5, weight: 1.5,
     }).bindPopup(`<b>🌏 M${mag} 지진</b><br>${place}<br>깊이 ${depth}km<br><small>${time}</small>`)
       .addTo(layers.quake);
     if (mag >= 3) {
       const icon = L.divIcon({
-        html: `<div style="background:rgba(7,17,31,.9);border:2px solid ${color};border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:800;color:${color}">M${mag}</div>`,
+        html: `<div style="background:rgba(8,20,42,.95);border:2px solid ${color};border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:.6rem;font-weight:900;color:${color};font-family:Inter,sans-serif">M${mag}</div>`,
         iconSize: [22, 22], iconAnchor: [11, 11], className: ''
       });
       L.marker([lat, lng], { icon })
@@ -655,38 +734,32 @@ function renderQuakeLayer() {
   });
 }
 
-
+// ── RAIN LAYER ──
 function renderRainLayer() {
   layers.rain.clearLayers();
   if (!layerState.rain || !rainData.length) return;
   rainData.forEach(c => {
     if (!c.rain || c.rain <= 0) return;
     const mm = c.rain;
-    // 반경: 강수량에 비례 (최소 15km, 최대 80km)
     const radius = Math.min(80000, 15000 + mm * 1800);
-    const opacity = Math.min(0.45, 0.1 + mm / 80);
+    const opacity = Math.min(0.4, 0.08 + mm / 80);
     const color = mm >= 30 ? '#ef4444' : mm >= 10 ? '#f59e0b' : '#3b82f6';
     const circle = L.circle([c.lat, c.lng], {
-      radius,
-      color: color,
-      fillColor: color,
-      fillOpacity: opacity,
-      opacity: opacity * 1.5,
-      weight: 1,
+      radius, color, fillColor: color,
+      fillOpacity: opacity, opacity: opacity * 1.4, weight: 1,
     });
     circle.bindPopup(`
       <div class="popup-title">🌧 ${c.name} 강수량</div>
       <div class="popup-row"><span class="popup-label">강수량</span><span class="popup-val" style="color:${color}">${mm}mm/h</span></div>
-      <div class="popup-row"><span class="popup-label">강수 유형</span><span class="popup-val">${c.pty===1?'비':c.pty===4?'소나기':c.pty===2?'눈비':'강수'}</span></div>
+      <div class="popup-row"><span class="popup-label">유형</span><span class="popup-val">${c.pty===1?'비':c.pty===4?'소나기':c.pty===2?'눈비':'강수'}</span></div>
     `, { maxWidth: 200 });
     layers.rain.addLayer(circle);
 
-    // 강수가 강하면 중심 펄스 마커 추가
     if (mm >= 10) {
       const pulseSz = mm >= 30 ? 18 : 13;
       const icon = L.divIcon({
         html: `<div class="pulse-wrap" style="width:${pulseSz}px;height:${pulseSz}px">
-          <div class="pulse-ring" style="width:${pulseSz}px;height:${pulseSz}px;background:${color};opacity:.5"></div>
+          <div class="pulse-ring" style="width:${pulseSz}px;height:${pulseSz}px;background:${color};opacity:.45"></div>
           <div style="width:${pulseSz*0.6}px;height:${pulseSz*0.6}px;border-radius:50%;background:${color};z-index:1;box-shadow:0 0 8px ${color}"></div>
         </div>`,
         iconSize: [pulseSz, pulseSz], iconAnchor: [pulseSz / 2, pulseSz / 2], className: ''
@@ -725,9 +798,10 @@ function renderClusters() {
 
     if (props.cluster) {
       const count = props.point_count;
-      const sz = count > 5000 ? 54 : count > 1000 ? 46 : count > 200 ? 38 : count > 50 ? 32 : 26;
+      const sz = count > 5000 ? 52 : count > 1000 ? 44 : count > 200 ? 36 : count > 50 ? 30 : 24;
+      const fontSize = sz > 42 ? 12 : 10;
       const icon = L.divIcon({
-        html: `<div class="cm" style="width:${sz}px;height:${sz}px;background:rgba(30,58,95,.85);font-size:${sz > 40 ? 13 : 11}px;border-color:rgba(59,130,246,.5)">${count > 9999 ? Math.round(count / 1000) + 'k' : count}</div>`,
+        html: `<div class="cm" style="width:${sz}px;height:${sz}px;background:rgba(13,32,64,.88);font-size:${fontSize}px">${count > 9999 ? Math.round(count / 1000) + 'k' : count}</div>`,
         iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2], className: ''
       });
       const mk = L.marker([lat, lng], { icon });
@@ -740,7 +814,6 @@ function renderClusters() {
     const { risk, rain } = calcRisk(pt);
     const hasUnder = pt.u > 0;
 
-    // 각 레이어에 추가
     if (risk === 'danger' && !layerState.danger) return;
     if (risk === 'watch' && !layerState.watch) return;
     if (risk === 'safe' && !layerState.safe) return;
@@ -749,14 +822,14 @@ function renderClusters() {
     const color = risk === 'danger' ? '#ef4444' : risk === 'watch' ? '#f59e0b' : '#22c55e';
     const sz = risk === 'danger' ? 14 : risk === 'watch' ? 10 : 7;
     const glow = risk === 'danger'
-      ? `box-shadow:0 0 0 3px rgba(239,68,68,.2),0 0 10px ${color}`
+      ? `box-shadow:0 0 0 3px rgba(239,68,68,.18),0 0 10px ${color}`
       : risk === 'watch' ? `box-shadow:0 0 6px ${color}` : '';
 
     const icon = L.divIcon({
       html: risk === 'danger'
         ? `<div class="pulse-wrap" style="width:${sz+6}px;height:${sz+6}px">
-            <div class="pulse-ring" style="width:${sz+6}px;height:${sz+6}px;background:${color};opacity:.4"></div>
-            <div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};${glow};border:1.5px solid rgba(255,255,255,.3)"></div>
+            <div class="pulse-ring" style="width:${sz+6}px;height:${sz+6}px;background:${color};opacity:.35"></div>
+            <div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};${glow};border:1.5px solid rgba(255,255,255,.25)"></div>
            </div>`
         : `<div style="width:${sz}px;height:${sz}px;border-radius:50%;background:${color};${glow};border:1px solid ${color}aa"></div>`,
       iconSize: [sz + (risk === 'danger' ? 6 : 0), sz + (risk === 'danger' ? 6 : 0)],
@@ -768,7 +841,7 @@ function renderClusters() {
     mk.bindPopup(`
       <div class="popup-badge ${risk}">${risk === 'danger' ? '⚠ 침수위험' : risk === 'watch' ? '⚡ 주의' : '✅ 안전'}</div>
       <div class="popup-title">${pt.b || '승강기 ' + pt.n}</div>
-      <div class="popup-row"><span class="popup-label">주소</span><span class="popup-val" style="font-size:.7rem">${pt.a || '-'}</span></div>
+      <div class="popup-row"><span class="popup-label">주소</span><span class="popup-val" style="font-size:.68rem">${pt.a || '-'}</span></div>
       <div class="popup-row"><span class="popup-label">지하층</span><span class="popup-val">${pt.u || 0}층</span></div>
       <div class="popup-row"><span class="popup-label">현재 강수</span><span class="popup-val" style="color:${rain >= 30 ? '#ef4444' : rain >= 10 ? '#f59e0b' : '#22c55e'}">${rain}mm/h</span></div>
       <div class="popup-row"><span class="popup-label">승강기 번호</span><span class="popup-val">${pt.n || '-'}</span></div>
@@ -789,10 +862,8 @@ function renderRain(data) {
     const barC = mm >= 30 ? 'var(--red)' : mm >= 10 ? 'var(--yellow)' : mm >= 1 ? 'var(--blue-light)' : 'var(--border)';
     const icon = d.pty === 1 ? '🌧' : d.pty === 4 ? '⛈' : d.pty === 2 ? '🌨' : '☁';
     return `<div class="rain-card ${cls}" onclick="map.setView([${d.lat},${d.lng}],10)">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span class="rc-name">${icon} ${d.name}</span>
-      </div>
-      <div class="rc-val">${mm > 0 ? mm + '<small style="font-size:.65rem;font-weight:400"> mm/h</small>' : '<span style="font-size:.7rem;color:var(--muted)">강수없음</span>'}</div>
+      <div class="rc-name">${icon} ${d.name}</div>
+      <div class="rc-val">${mm > 0 ? mm + '<small style="font-size:.6rem;font-weight:400"> mm/h</small>' : '<span style="font-size:.68rem;color:var(--muted)">강수없음</span>'}</div>
       <div class="rc-bar"><div class="rc-fill" style="width:${barW}%;background:${barC}"></div></div>
     </div>`;
   }).join('');
@@ -837,7 +908,7 @@ function renderElevList() {
   } else { banner.style.display = 'none'; }
 
   if (!risky.length) {
-    document.getElementById('elev-list').innerHTML = '<div style="text-align:center;padding:32px 16px;color:var(--muted);font-size:.75rem"><div style="font-size:1.5rem;margin-bottom:8px">✅</div>현재 위험·주의 승강기 없음</div>';
+    document.getElementById('elev-list').innerHTML = '<div style="text-align:center;padding:32px 16px;color:var(--muted);font-size:.72rem"><div style="font-size:1.4rem;margin-bottom:8px">✅</div>현재 위험·주의 승강기 없음</div>';
     return;
   }
   document.getElementById('elev-list').innerHTML = risky.slice(0, 120).map(p =>
@@ -877,13 +948,15 @@ function setProgress(pct, txt) {
 }
 function setStatus(state, txt) {
   const dot = document.getElementById('sdot');
+  const pill = document.getElementById('status-pill');
   dot.className = 'sdot' + (state === 'loading' ? ' loading' : state === 'error' ? ' error' : '');
+  pill.className = 'status-pill' + (state === 'error' ? ' err' : state === 'loading' ? ' load' : '');
   document.getElementById('stxt').textContent = txt;
   if (state === 'ok') document.getElementById('lupd').textContent = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }) + ' 기준';
 }
 
 // ── CACHE ──
-const CACHE_KEY = 'flood_elev_v4'; // 454,404건 전국판
+const CACHE_KEY = 'flood_elev_v4';
 const CACHE_TTL = 30 * 60 * 1000;
 function loadLocalCache() {
   try { const r = localStorage.getItem(CACHE_KEY); if (!r) return null; const { ts, data } = JSON.parse(r); if (Date.now() - ts > CACHE_TTL) { localStorage.removeItem(CACHE_KEY); return null; } return data; } catch { return null; }
@@ -940,7 +1013,6 @@ async function init() {
     setProgress(25, '강수 데이터 완료');
   } catch { rainData = []; setProgress(25, '강수 데이터 실패'); }
 
-  // 기상(기온·풍속·태풍) + 지진 병렬 로드
   try {
     const [wd] = await Promise.all([
       fetch(`${WORKER_URL}/weather`).then(r => r.json()),
