@@ -241,6 +241,31 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 
       <div class="layer-row">
         <div class="layer-info">
+          <div class="layer-dot" style="background:#f97316;box-shadow:0 0 6px #f97316"></div>
+          <span class="layer-name">기온</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-temp" onchange="toggleLayer('temp')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
+          <div class="layer-dot" style="background:#818cf8;box-shadow:0 0 4px #818cf8"></div>
+          <span class="layer-name">풍속</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-wind" onchange="toggleLayer('wind')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
+          <div class="layer-dot" style="background:#e879f9;box-shadow:0 0 6px #e879f9"></div>
+          <span class="layer-name">태풍</span>
+          <span class="layer-count" id="cnt-typhoon">0</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-typhoon" checked onchange="toggleLayer('typhoon')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
           <div class="layer-dot" style="background:var(--red);box-shadow:0 0 6px var(--red)"></div>
           <span class="layer-name">침수 위험</span>
           <span class="layer-count" id="cnt-danger">0</span>
@@ -292,12 +317,15 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
 const WORKER_URL = 'https://btr-flood-worker.nirvana-sangsara.workers.dev';
 const VWORLD_KEY = '620104E4-86EB-3711-9E1E-A085D1B979D4';
 
-let map, sc, allPoints = [], rainData = [];
+let map, sc, allPoints = [], rainData = [], weatherData = null;
 // 레이어 상태
-const layerState = { rain: true, danger: true, watch: true, safe: false, under: false };
+const layerState = { rain: true, temp: false, wind: false, typhoon: true, danger: true, watch: true, safe: false, under: false };
 // Leaflet 레이어 그룹
 const layers = {
   rain: L.layerGroup(),
+  temp: L.layerGroup(),
+  wind: L.layerGroup(),
+  typhoon: L.layerGroup(),
   danger: L.layerGroup(),
   watch: L.layerGroup(),
   safe: L.layerGroup(),
@@ -314,6 +342,9 @@ function initMap() {
   L.control.zoom({ position: 'bottomright' }).addTo(map);
   // 레이어 순서: rain 아래, 나머지 위
   layers.rain.addTo(map);
+  layers.temp.addTo(map);
+  layers.wind.addTo(map);
+  layers.typhoon.addTo(map);
   layers.under.addTo(map);
   layers.safe.addTo(map);
   layers.watch.addTo(map);
@@ -325,11 +356,11 @@ function initMap() {
 // ── LAYER TOGGLE ──
 function toggleLayer(name) {
   layerState[name] = document.getElementById('lyr-' + name).checked;
-  if (name === 'rain') {
-    renderRainLayer();
-  } else {
-    renderClusters();
-  }
+  if (name === 'rain') renderRainLayer();
+  else if (name === 'temp') renderTempLayer();
+  else if (name === 'wind') renderWindLayer();
+  else if (name === 'typhoon') renderTyphoonLayer();
+  else renderClusters();
 }
 
 // ── RAIN → RISK ──
@@ -357,7 +388,70 @@ function calcRisk(pt) {
   return { risk, rain };
 }
 
-// ── RAIN LAYER (강수 반경 시각화) ──
+// ── TEMP LAYER (기온 히트맵) ──
+function renderTempLayer() {
+  layers.temp.clearLayers();
+  if (!layerState.temp || !weatherData?.stations) return;
+  weatherData.stations.forEach(s => {
+    if (s.ta == null) return;
+    const ta = s.ta;
+    // 기온 색상: 0℃이하=파랑, 10=하늘, 20=초록, 30=주황, 35이상=빨강
+    const color = ta >= 35 ? '#ef4444' : ta >= 30 ? '#f97316' : ta >= 25 ? '#f59e0b' : ta >= 20 ? '#22c55e' : ta >= 10 ? '#60a5fa' : '#818cf8';
+    const radius = 40000;
+    L.circle([s.lat, s.lng], {
+      radius, color, fillColor: color,
+      fillOpacity: 0.18, opacity: 0.4, weight: 1,
+    }).addTo(layers.temp);
+    const icon = L.divIcon({
+      html: `<div style="background:rgba(10,16,30,.85);border:1px solid ${color};border-radius:6px;padding:2px 6px;font-size:.72rem;font-weight:700;color:${color};white-space:nowrap">${ta}°C</div>`,
+      iconSize: [52, 22], iconAnchor: [26, 11], className: ''
+    });
+    L.marker([s.lat, s.lng], { icon })
+      .bindPopup(`<b>${s.name}</b><br>기온 ${ta}°C / 습도 ${s.hm}%`)
+      .addTo(layers.temp);
+  });
+}
+
+// ── WIND LAYER (풍속 화살표) ──
+function renderWindLayer() {
+  layers.wind.clearLayers();
+  if (!layerState.wind || !weatherData?.stations) return;
+  weatherData.stations.forEach(s => {
+    if (s.ws == null) return;
+    const ws = s.ws;
+    const color = ws >= 14 ? '#ef4444' : ws >= 9 ? '#f97316' : ws >= 5 ? '#f59e0b' : '#818cf8';
+    const wd = s.wd || 0;
+    // 풍향 화살표 (wd=바람 오는 방향 → 나가는 방향은 +180)
+    const arrowDeg = (wd + 180) % 360;
+    const icon = L.divIcon({
+      html: `<div style="text-align:center">
+        <div style="font-size:1.2rem;transform:rotate(${arrowDeg}deg);line-height:1">→</div>
+        <div style="background:rgba(10,16,30,.85);border:1px solid ${color};border-radius:4px;padding:1px 5px;font-size:.68rem;font-weight:700;color:${color};margin-top:1px">${ws}m/s</div>
+      </div>`,
+      iconSize: [44, 36], iconAnchor: [22, 18], className: ''
+    });
+    L.marker([s.lat, s.lng], { icon })
+      .bindPopup(`<b>${s.name}</b><br>풍속 ${ws}m/s / 풍향 ${wd}°`)
+      .addTo(layers.wind);
+  });
+}
+
+// ── TYPHOON LAYER ──
+function renderTyphoonLayer() {
+  layers.typhoon.clearLayers();
+  const typh = weatherData?.typhoons || [];
+  document.getElementById('cnt-typhoon').textContent = typh.length;
+  if (!layerState.typhoon || !typh.length) return;
+  typh.forEach(t => {
+    // 태풍 위치는 별도 API 필요 — 현재는 배너만 표시
+    document.getElementById('alert-banner').innerHTML =
+      `🌀 태풍 ${t.name_kr || t.name_en} (${t.yr}-${t.seq}호) 현재 활동 중 — 영향도: ${['','직접영향','간접영향','영향','미영향'][parseInt(t.eff)]||t.eff}`;
+    document.getElementById('alert-banner').className = 'alert-banner danger';
+    document.getElementById('alert-banner').style.display = 'block';
+  });
+}
+
+
 function renderRainLayer() {
   layers.rain.clearLayers();
   if (!layerState.rain || !rainData.length) return;
@@ -604,11 +698,19 @@ async function loadElevators() {
 
 // ── REFRESH ──
 async function refresh() {
-  setStatus('loading', '강수 업데이트 중...');
+  setStatus('loading', '기상 업데이트 중...');
   try {
-    rainData = await (await fetch(`${WORKER_URL}/rain?t=${Date.now()}`)).json();
+    const [rain, weather] = await Promise.all([
+      fetch(`${WORKER_URL}/rain?t=${Date.now()}`).then(r => r.json()),
+      fetch(`${WORKER_URL}/weather?t=${Date.now()}`).then(r => r.json()),
+    ]);
+    rainData = rain;
+    weatherData = weather;
     renderRain(rainData);
     renderRainLayer();
+    renderTempLayer();
+    renderWindLayer();
+    renderTyphoonLayer();
     renderElevList();
     renderClusters();
     setStatus('ok', '실시간 연결');
@@ -622,8 +724,14 @@ async function init() {
   try {
     rainData = await (await fetch(`${WORKER_URL}/rain`)).json();
     renderRain(rainData);
-    setProgress(30, '강수 데이터 완료');
-  } catch { rainData = []; setProgress(30, '강수 데이터 실패'); }
+    setProgress(25, '강수 데이터 완료');
+  } catch { rainData = []; setProgress(25, '강수 데이터 실패'); }
+
+  // 기상(기온·풍속·태풍) 병렬 로드
+  try {
+    weatherData = await (await fetch(`${WORKER_URL}/weather`)).json();
+    renderTyphoonLayer();
+  } catch { weatherData = null; }
 
   setProgress(40, '승강기 데이터 수신 중...');
   await loadElevators();
