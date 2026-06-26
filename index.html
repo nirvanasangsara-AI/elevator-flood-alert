@@ -863,7 +863,7 @@ function setStatus(state, txt) {
 }
 
 // ── CACHE ──
-const CACHE_KEY = 'flood_elev_v4';
+const CACHE_KEY = 'flood_elev_v5'; // 880K 전국판 강제 갱신
 const CACHE_TTL = 30 * 60 * 1000;
 function loadLocalCache() {
   try { const r = localStorage.getItem(CACHE_KEY); if (!r) return null; const { ts, data } = JSON.parse(r); if (Date.now() - ts > CACHE_TTL) { localStorage.removeItem(CACHE_KEY); return null; } return data; } catch { return null; }
