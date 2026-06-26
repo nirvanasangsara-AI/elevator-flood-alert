@@ -236,6 +236,67 @@ export default {
       return new Response(JSON.stringify(result), { headers: CORS });
     }
 
+    // /elevators/summary — Tier 1: 시군구별 집계 (전국보기 줌1-7)
+    // R2 전체 캐시 → 시군구 키 기준 카운트 집계 → 250개 헥사곤 포인트
+    if (url.pathname === '/elevators/summary') {
+      try {
+        const obj = await env.ELEV_CACHE.get(R2_KEY);
+        if (obj) {
+          const ds = new DecompressionStream('gzip');
+          const text = await new Response(obj.body.pipeThrough(ds)).text();
+          const data = JSON.parse(text);
+          const points = data.points || [];
+
+          // 시군구 집계
+          const agg = {};
+          for (const p of points) {
+            // 주소 앞 두 토큰(시도+시군구) 키
+            const parts = (p.addr || '').split(' ');
+            const key = parts[0] + ' ' + (parts[1] || '');
+            if (!agg[key]) {
+              const coord = COORD_TABLE[key] || COORD_TABLE[parts[0]];
+              if (coord) agg[key] = { lat: coord[0], lng: coord[1], key, total: 0, under: 0, danger: 0 };
+            }
+            if (agg[key]) {
+              agg[key].total++;
+              if (p.under > 0) agg[key].under++;
+            }
+          }
+
+          const result = Object.values(agg);
+          return new Response(JSON.stringify({ ts: Date.now(), total: points.length, regions: result }), {
+            headers: { ...CORS, 'Cache-Control': 'public, max-age=1800' },
+          });
+        }
+      } catch(e) {}
+      return new Response(JSON.stringify({ ts: Date.now(), total: 0, regions: [] }), { headers: CORS });
+    }
+
+    // /elevators/bbox?n=&s=&e=&w=&limit= — Tier 3: viewport 박스 내 포인트 (줌 12+)
+    // R2 전체 캐시에서 bbox 필터링 → 최대 limit(기본2000)건 반환
+    if (url.pathname === '/elevators/bbox') {
+      const n = parseFloat(url.searchParams.get('n') || '38.5');
+      const s = parseFloat(url.searchParams.get('s') || '33');
+      const e = parseFloat(url.searchParams.get('e') || '130');
+      const w = parseFloat(url.searchParams.get('w') || '125');
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '2000'), 5000);
+      try {
+        const obj = await env.ELEV_CACHE.get(R2_KEY);
+        if (obj) {
+          const ds = new DecompressionStream('gzip');
+          const text = await new Response(obj.body.pipeThrough(ds)).text();
+          const data = JSON.parse(text);
+          const pts = (data.points || [])
+            .filter(p => p.lat >= s && p.lat <= n && p.lng >= w && p.lng <= e)
+            .slice(0, limit);
+          return new Response(JSON.stringify({ ts: Date.now(), total: pts.length, points: pts }), {
+            headers: { ...CORS, 'Cache-Control': 'public, max-age=300' },
+          });
+        }
+      } catch(e) {}
+      return new Response(JSON.stringify({ ts: Date.now(), total: 0, points: [] }), { headers: CORS });
+    }
+
     return new Response('BTR Flood Alert Worker v3', { headers: {'Content-Type':'text/plain'} });
   },
 };

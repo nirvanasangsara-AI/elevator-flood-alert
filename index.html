@@ -783,8 +783,17 @@ function renderRainLayer() {
 }
 
 // ── SUPERCLUSTER ──
+// ── TIER SYSTEM ──
+// Zoom 1-7:  Tier1 — 시군구 집계 버블 (Worker /elevators/summary)
+// Zoom 8-11: Tier2 — Supercluster (기존 500~5K 포인트)
+// Zoom 12+:  Tier3 — bbox 요청 (Worker /elevators/bbox, 뷰포트 내 최대 2K건)
+
+let summaryData = null;  // Tier1 집계 캐시
+let bboxCache = {};      // Tier3: "n,s,e,w" → 포인트 배열 (LRU 5개)
+let bboxPending = false; // Tier3 중복 요청 방지
+
 function buildSupercluster(points) {
-  sc = new Supercluster({ radius: 60, maxZoom: 16, minZoom: 5 });
+  sc = new Supercluster({ radius: 60, maxZoom: 16, minZoom: 8 });
   sc.load(points.map(p => ({
     type: 'Feature',
     properties: { ...p },
@@ -792,7 +801,105 @@ function buildSupercluster(points) {
   })));
 }
 
-function renderClusters() {
+// Tier1: 시군구 집계 버블 렌더링
+async function renderTier1() {
+  // 캐시 없으면 Worker 요청
+  if (!summaryData) {
+    try {
+      const r = await fetch(`${WORKER_URL}/elevators/summary`);
+      summaryData = await r.json();
+    } catch(e) {
+      // summary 실패 시 allPoints로 자체 집계
+      summaryData = buildLocalSummary();
+    }
+  }
+
+  const regions = summaryData.regions || [];
+  layers.cluster.clearLayers();
+  layers.danger.clearLayers();
+  layers.watch.clearLayers();
+  layers.safe.clearLayers();
+  layers.under.clearLayers();
+
+  const maxTotal = Math.max(...regions.map(r => r.total), 1);
+
+  regions.forEach(reg => {
+    if (!reg.lat || !reg.lng) return;
+    const ratio = reg.total / maxTotal;
+    // 버블 크기: 로그 스케일 20~70px
+    const sz = Math.round(20 + Math.log1p(reg.total) / Math.log1p(maxTotal) * 50);
+    const underRatio = reg.total > 0 ? reg.under / reg.total : 0;
+    // 색상: 지하층 비율에 따라 파랑→주황
+    const h = Math.round(220 - underRatio * 160); // 220=파랑, 60=주황
+    const bg = `hsl(${h},70%,45%)`;
+    const label = reg.total > 9999 ? Math.round(reg.total/1000)+'k' : reg.total.toLocaleString();
+    const regionName = reg.key.split(' ').slice(1).join(' ') || reg.key;
+
+    const icon = L.divIcon({
+      html: `<div style="
+        width:${sz}px;height:${sz}px;border-radius:50%;
+        background:${bg};opacity:.82;
+        border:2px solid rgba(255,255,255,.2);
+        box-shadow:0 2px 12px rgba(0,0,0,.4);
+        display:flex;align-items:center;justify-content:center;
+        flex-direction:column;cursor:pointer;">
+        <div style="font-size:${sz>40?11:9}px;font-weight:800;color:#fff;line-height:1">${label}</div>
+        ${sz>36?`<div style="font-size:7px;color:rgba(255,255,255,.7);margin-top:1px">${regionName}</div>`:''}
+      </div>`,
+      iconSize: [sz, sz], iconAnchor: [sz/2, sz/2], className: ''
+    });
+
+    const mk = L.marker([reg.lat, reg.lng], { icon });
+    mk.bindTooltip(`<b>${reg.key}</b><br>승강기 ${reg.total.toLocaleString()}대<br>지하층 포함 ${reg.under.toLocaleString()}대`, { sticky: true });
+    mk.on('click', () => map.setView([reg.lat, reg.lng], 10));
+    layers.cluster.addLayer(mk);
+  });
+}
+
+// 로컬 allPoints로 자체 집계 (Worker summary 실패 시 폴백)
+function buildLocalSummary() {
+  const agg = {};
+  for (const p of allPoints) {
+    const parts = (p.a || '').split(' ');
+    const key = (parts[0] || '') + ' ' + (parts[1] || '');
+    if (!agg[key]) agg[key] = { key, lat: p.lat, lng: p.lng, total: 0, under: 0 };
+    agg[key].total++;
+    if (p.u > 0) agg[key].under++;
+  }
+  return { ts: Date.now(), total: allPoints.length, regions: Object.values(agg) };
+}
+
+// Tier3: bbox 요청 (줌 12+)
+let _bboxDebounce = null;
+async function fetchBbox() {
+  if (bboxPending) return;
+  clearTimeout(_bboxDebounce);
+  _bboxDebounce = setTimeout(async () => {
+    bboxPending = true;
+    const b = map.getBounds();
+    const n = b.getNorth().toFixed(4), s = b.getSouth().toFixed(4);
+    const e = b.getEast().toFixed(4), w = b.getWest().toFixed(4);
+    const key = `${n},${s},${e},${w}`;
+    if (bboxCache[key]) { bboxPending = false; renderTier2(); return; }
+
+    try {
+      const r = await fetch(`${WORKER_URL}/elevators/bbox?n=${n}&s=${s}&e=${e}&w=${w}&limit=2000`);
+      const d = await r.json();
+      const pts = (d.points || []).map(p => ({ n: p.no||'', b:(p.name||'').slice(0,20), a:(p.addr||'').slice(0,30), u:p.under||0, t:0, lat:p.lat, lng:p.lng }));
+      // LRU 5 캐시
+      const keys = Object.keys(bboxCache);
+      if (keys.length >= 5) delete bboxCache[keys[0]];
+      bboxCache[key] = pts;
+      // Supercluster 재빌드
+      buildSupercluster([...allPoints, ...pts]);
+    } catch(e) {}
+    bboxPending = false;
+    renderTier2();
+  }, 300);
+}
+
+// Tier2: 기존 Supercluster 렌더
+function renderTier2() {
   layers.danger.clearLayers();
   layers.watch.clearLayers();
   layers.safe.clearLayers();
@@ -864,6 +971,22 @@ function renderClusters() {
     targetLayer.addLayer(mk);
   });
 }
+
+// ── 통합 renderClusters — 줌레벨에 따라 Tier 분기 ──
+function renderClusters() {
+  const zoom = map.getZoom();
+  if (zoom <= 7) {
+    // Tier 1: 시군구 집계 버블
+    renderTier1();
+  } else if (zoom >= 12) {
+    // Tier 3: bbox 상세 요청 후 Tier2 렌더
+    fetchBbox();
+  } else {
+    // Tier 2: Supercluster
+    renderTier2();
+  }
+}
+
 
 // ── RAIN UI ──
 function renderRain(data) {
