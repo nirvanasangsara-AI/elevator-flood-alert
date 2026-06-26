@@ -68,7 +68,41 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 .layout{display:flex;flex:1;overflow:hidden}
 
 /* ── SIDEBAR ── */
-.sidebar{width:300px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0}
+.sidebar{width:300px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;transition:transform .28s cubic-bezier(.4,0,.2,1)}
+
+/* ── MOBILE HAMBURGER ── */
+.sb-toggle-btn{
+  display:none;position:fixed;bottom:22px;left:16px;z-index:1200;
+  width:48px;height:48px;border-radius:50%;
+  background:rgba(37,99,235,.93);border:1.5px solid rgba(59,130,246,.55);
+  color:#fff;font-size:1.25rem;cursor:pointer;
+  box-shadow:0 4px 20px rgba(0,0,0,.55);transition:.15s;
+  align-items:center;justify-content:center;
+}
+.sb-toggle-btn:active{transform:scale(.9)}
+.sb-overlay{
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:950;backdrop-filter:blur(3px);
+}
+.sb-overlay.open{display:block}
+
+@media(max-width:768px){
+  .sb-toggle-btn{display:flex}
+  .sidebar{
+    position:fixed;left:0;top:0;bottom:0;z-index:1000;
+    width:290px;transform:translateX(-100%);
+    box-shadow:4px 0 32px rgba(0,0,0,.65);
+  }
+  .sidebar.open{transform:translateX(0)}
+  .topbar{padding:0 12px}
+  .logo-sub{display:none}
+  .map-search{top:10px;left:10px}
+  .map-search input{width:150px;font-size:.72rem}
+  .map-search button{padding:7px 10px;font-size:.72rem}
+  .layer-panel{top:10px;right:10px;min-width:155px;padding:10px 11px}
+  .layer-name{font-size:.67rem}
+  .map-legend{display:none}
+}
 .sb-section{border-bottom:1px solid var(--border);flex-shrink:0}
 .sb-hdr{padding:8px 14px;font-size:.62rem;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:flex;align-items:center;gap:6px}
 
@@ -246,6 +280,9 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 </div>
 
 <div class="alert-banner" id="alert-banner"></div>
+
+<div class="sb-overlay" id="sb-overlay" onclick="closeSidebar()"></div>
+<button class="sb-toggle-btn" id="sb-toggle" onclick="toggleSidebar()">☰</button>
 
 <div class="layout">
   <div class="sidebar">
@@ -943,6 +980,21 @@ async function init() {
   document.getElementById('loading').classList.add('hidden');
   setStatus('ok', '실시간 연결');
   setInterval(refresh, 5 * 60 * 1000);
+}
+
+// ── MOBILE SIDEBAR ──
+function toggleSidebar() {
+  const sb = document.querySelector('.sidebar');
+  const ov = document.getElementById('sb-overlay');
+  const btn = document.getElementById('sb-toggle');
+  const isOpen = sb.classList.toggle('open');
+  ov.classList.toggle('open', isOpen);
+  btn.textContent = isOpen ? '✕' : '☰';
+}
+function closeSidebar() {
+  document.querySelector('.sidebar').classList.remove('open');
+  document.getElementById('sb-overlay').classList.remove('open');
+  document.getElementById('sb-toggle').textContent = '☰';
 }
 
 init();
