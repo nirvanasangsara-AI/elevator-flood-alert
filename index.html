@@ -393,6 +393,14 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 
       <div class="layer-row">
         <div class="layer-info">
+          <div class="layer-dot" style="background:rgba(30,58,95,.9);border:1.5px solid rgba(59,130,246,.4);box-shadow:0 0 4px rgba(59,130,246,.3)"></div>
+          <span class="layer-name">🔢 승강기 숫자</span>
+        </div>
+        <label class="toggle"><input type="checkbox" id="lyr-cluster" checked onchange="toggleLayer('cluster')"><span class="tslider"></span></label>
+      </div>
+
+      <div class="layer-row">
+        <div class="layer-info">
           <div class="layer-dot" style="background:linear-gradient(135deg,#312e81,#3b82f6,#22c55e,#dc2626);border-radius:3px"></div>
           <span class="layer-name">🔥 승강기 밀도</span>
         </div>
@@ -456,7 +464,7 @@ let map, sc, heatLayer = null, allPoints = [], rainData = [], weatherData = null
 let radarFrames = [], radarIdx = 0, radarTimer = null, radarTiles = [];
 
 // 레이어 상태
-const layerState = { rain:true, radar:false, temp:false, wind:false, typhoon:true, quake:false, heatmap:false, danger:true, watch:true, safe:false, under:false };
+const layerState = { rain:true, radar:false, temp:false, wind:false, typhoon:true, quake:false, heatmap:false, cluster:true, danger:true, watch:true, safe:false, under:false };
 // Leaflet 레이어 그룹
 const layers = {
   rain: L.layerGroup(), radar: L.layerGroup(), temp: L.layerGroup(),
@@ -748,6 +756,7 @@ function renderClusters() {
     const props = feat.properties;
 
     if (props.cluster) {
+      if (!layerState.cluster) return; // 클러스터 숫자 OFF면 스킵
       const count = props.point_count;
       const sz = count > 5000 ? 52 : count > 1000 ? 44 : count > 200 ? 36 : count > 50 ? 30 : 24;
       const fontSize = sz > 42 ? 12 : 10;
