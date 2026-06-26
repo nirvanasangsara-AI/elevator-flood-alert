@@ -546,6 +546,14 @@ function initMap() {
   layers.danger.addTo(map);
   layers.cluster.addTo(map);
   map.on('moveend zoomend', renderClusters);
+
+  // 줌 12 이상: RainViewer 레이더 타일 자동 숨김 (maxZoom:11 초과 시 깨진 이미지 방지)
+  map.on('zoomend', () => {
+    const z = map.getZoom();
+    radarTiles.forEach(t => {
+      try { z > 11 ? map.removeLayer(t) : (layerState.radar && t.addTo(map)); } catch{}
+    });
+  });
 }
 
 // ── LAYER TOGGLE ──
@@ -610,7 +618,7 @@ async function renderRadarLayer() {
       // 새 타일 opacity 0 → 로드 후 fade in
       const tile = L.tileLayer(
         `https://tilecache.rainviewer.com${frame.path}/512/{z}/{x}/{y}/4/1_1.png`,
-        { opacity: 0, attribution: '©RainViewer', maxZoom: 18, tileSize: 512, zoomOffset: -1 }
+        { opacity: 0, attribution: '©RainViewer', minZoom: 1, maxZoom: 11, tileSize: 512, zoomOffset: -1 }
       );
       tile.addTo(map);
       radarTiles.push(tile);
