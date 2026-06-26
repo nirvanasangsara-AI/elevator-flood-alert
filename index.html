@@ -137,19 +137,6 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 .progress-bar{width:240px;height:2px;background:var(--border);border-radius:1px;overflow:hidden}
 .progress-fill{height:100%;background:linear-gradient(90deg,var(--blue),#818cf8);border-radius:1px;transition:.4s;width:0%}
 
-/* 모바일 로딩: 화면 안 막히게 하단 토스트로 */
-@media(max-width:767px){
-  .loading-overlay{
-    inset:auto;bottom:76px;left:12px;right:12px;
-    background:rgba(8,20,42,.96);
-    border:1px solid var(--border2);
-    border-radius:14px;
-    padding:14px 18px;
-    z-index:800;
-  }
-  .progress-bar{width:100%}
-}
-
 /* search bar */
 .map-search{position:absolute;top:14px;left:14px;z-index:800;display:flex;gap:6px}
 .map-search input{
@@ -236,72 +223,6 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 @keyframes pulse-ring{0%{transform:scale(.8);opacity:.7}70%{transform:scale(1.6);opacity:0}100%{transform:scale(1.6);opacity:0}}
 .pulse-wrap{position:relative;display:flex;align-items:center;justify-content:center}
 .pulse-ring{position:absolute;border-radius:50%;animation:pulse-ring 2s ease-out infinite}
-
-/* ── MOBILE BOTTOM SHEET ── */
-.sb-handle{display:none}
-.mobile-fab{display:none}
-.mobile-stats-bar{display:none}
-.mc-btn{background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.2);color:var(--blue-light);padding:5px 12px;border-radius:16px;font-size:.7rem;cursor:pointer;transition:.15s;white-space:nowrap}
-.mc-btn.active,.mc-btn:hover{background:rgba(59,130,246,.25);border-color:var(--blue)}
-.map-controls{position:absolute;bottom:14px;left:14px;z-index:800;display:flex;gap:6px;flex-wrap:wrap}
-
-@media(max-width:767px){
-  /* ─ topbar 간소화 ─ */
-  .logo-sub{display:none}
-  .logo-title{font-size:.83rem}
-  .topbar{height:46px;padding:0 12px}
-  .topbar-right #lupd{display:none}
-
-  /* ─ layout: 지도 full-screen ─ */
-  .layout{position:relative;overflow:hidden;flex:1;min-height:0}
-  .map-wrap{position:absolute;inset:0;z-index:1}
-
-  /* ─ sidebar → 하단 시트 ─ */
-  .sidebar{
-    position:fixed;bottom:0;left:0;right:0;width:100%;
-    height:72vh;
-    transform:translateY(calc(100% - 60px));
-    transition:transform .32s cubic-bezier(.4,0,.2,1);
-    border-radius:18px 18px 0 0;
-    border-right:none;border-top:1px solid var(--border2);
-    z-index:900;
-    overflow:hidden
-  }
-  .sidebar.open{transform:translateY(0)}
-
-  /* 상단 드래그 핸들 */
-  .sb-handle{
-    display:flex;flex-direction:column;align-items:center;justify-content:center;
-    height:44px;cursor:pointer;flex-shrink:0;
-    background:var(--panel);border-radius:18px 18px 0 0;
-    border-bottom:1px solid var(--border)
-  }
-  .sb-handle-bar{width:36px;height:4px;background:var(--border2);border-radius:2px}
-  .sb-handle-txt{font-size:.65rem;color:var(--muted);margin-top:4px}
-
-  /* ─ layer-panel / legend → 모바일 숨김 ─ */
-  .layer-panel,.map-legend{display:none!important}
-
-  /* ─ map-search 풀폭 ─ */
-  .map-search{left:8px;right:8px;top:8px}
-  .map-search input{flex:1;width:auto;min-width:0;font-size:.82rem}
-
-  /* ─ map-controls 하단 왼쪽 ─ */
-  .map-controls{bottom:72px;left:8px;right:8px;flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
-  .map-controls::-webkit-scrollbar{display:none}
-
-  /* ─ 미니 stats 바 (핸들 안에 표시) ─ */
-  .sb-handle-stats{display:flex;gap:16px;margin-top:2px}
-  .sb-hs-item{display:flex;align-items:center;gap:4px;font-size:.7rem;font-weight:700}
-
-  /* sidebar 내부 스크롤 확보 */
-  .elev-list{overflow-y:auto;-webkit-overflow-scrolling:touch}
-
-  /* 시트 열릴 때 지도 위 딤처리 */
-  .map-dim{display:block!important}
-}
-
-.map-dim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:850;transition:opacity .3s}
 </style>
 </head>
 <body>
@@ -328,15 +249,6 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 
 <div class="layout">
   <div class="sidebar">
-    <!-- 모바일 드래그 핸들 (PC에서는 display:none) -->
-    <div class="sb-handle" id="sb-handle" onclick="toggleSheet()">
-      <div class="sb-handle-bar"></div>
-      <div class="sb-handle-stats">
-        <span class="sb-hs-item" style="color:var(--blue-light)">전체 <span id="sh-total">-</span></span>
-        <span class="sb-hs-item" style="color:var(--red)">🔴 <span id="sh-danger">0</span></span>
-        <span class="sb-hs-item" style="color:var(--yellow)">🟡 <span id="sh-watch">0</span></span>
-      </div>
-    </div>
 
     <div class="sb-section">
       <div class="stats-grid">
@@ -387,17 +299,6 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
     </div>
 
     <div id="map"></div>
-
-    <!-- 딤 오버레이 (모바일 시트 열릴 때) -->
-    <div class="map-dim" id="map-dim" onclick="closeSheet()"></div>
-
-    <!-- 모바일 퀵 필터 칩 (지도 위 하단) -->
-    <div class="map-controls" id="map-controls">
-      <button class="mc-btn active" onclick="setQuickFilter('all',this)">🗺 전체</button>
-      <button class="mc-btn" onclick="setQuickFilter('danger',this)">🔴 위험</button>
-      <button class="mc-btn" onclick="setQuickFilter('watch',this)">🟡 주의</button>
-      <button class="mc-btn" onclick="setQuickFilter('under',this)">🏗 지하층</button>
-    </div>
 
     <!-- 레이어 토글 패널 -->
     <div class="layer-panel">
@@ -546,14 +447,6 @@ function initMap() {
   layers.danger.addTo(map);
   layers.cluster.addTo(map);
   map.on('moveend zoomend', renderClusters);
-
-  // 줌 12 이상: RainViewer 레이더 타일 자동 숨김 (maxZoom:11 초과 시 깨진 이미지 방지)
-  map.on('zoomend', () => {
-    const z = map.getZoom();
-    radarTiles.forEach(t => {
-      try { z > 11 ? map.removeLayer(t) : (layerState.radar && t.addTo(map)); } catch{}
-    });
-  });
 }
 
 // ── LAYER TOGGLE ──
@@ -618,7 +511,7 @@ async function renderRadarLayer() {
       // 새 타일 opacity 0 → 로드 후 fade in
       const tile = L.tileLayer(
         `https://tilecache.rainviewer.com${frame.path}/512/{z}/{x}/{y}/4/1_1.png`,
-        { opacity: 0, attribution: '©RainViewer', minZoom: 1, maxZoom: 11, tileSize: 512, zoomOffset: -1 }
+        { opacity: 0, attribution: '©RainViewer', maxZoom: 18, maxNativeZoom: 6, tileSize: 512, zoomOffset: -1 }
       );
       tile.addTo(map);
       radarTiles.push(tile);
@@ -791,22 +684,8 @@ function renderRainLayer() {
 }
 
 // ── SUPERCLUSTER ──
-// ── TIER SYSTEM ──
-// Zoom 1-7:  Tier1 — 시군구 집계 버블 (Worker /elevators/summary)
-// Zoom 8-11: Tier2 — Supercluster (기존 500~5K 포인트)
-// Zoom 12+:  Tier3 — bbox 요청 (Worker /elevators/bbox, 뷰포트 내 최대 2K건)
-
-let summaryData = null;  // Tier1 집계 캐시
-let bboxCache = {};      // Tier3: "n,s,e,w" → 포인트 배열 (LRU 5개)
-let bboxPending = false; // Tier3 중복 요청 방지
-
 function buildSupercluster(points) {
-  sc = new Supercluster({
-    radius: 40,      // 60→40: 클러스터 반경 축소, 더 세밀하게
-    maxZoom: 14,     // 16→14: 줌14 이상은 개별 마커
-    minZoom: 8,
-    minPoints: 3,    // 2개짜리 클러스터 제거
-  });
+  sc = new Supercluster({ radius: 60, maxZoom: 16, minZoom: 5 });
   sc.load(points.map(p => ({
     type: 'Feature',
     properties: { ...p },
@@ -814,105 +693,7 @@ function buildSupercluster(points) {
   })));
 }
 
-// Tier1: 시군구 집계 버블 렌더링
-async function renderTier1() {
-  // 캐시 없으면 Worker 요청
-  if (!summaryData) {
-    try {
-      const r = await fetch(`${WORKER_URL}/elevators/summary`);
-      summaryData = await r.json();
-    } catch(e) {
-      // summary 실패 시 allPoints로 자체 집계
-      summaryData = buildLocalSummary();
-    }
-  }
-
-  const regions = summaryData.regions || [];
-  layers.cluster.clearLayers();
-  layers.danger.clearLayers();
-  layers.watch.clearLayers();
-  layers.safe.clearLayers();
-  layers.under.clearLayers();
-
-  const maxTotal = Math.max(...regions.map(r => r.total), 1);
-
-  regions.forEach(reg => {
-    if (!reg.lat || !reg.lng) return;
-    const ratio = reg.total / maxTotal;
-    // 버블 크기: 로그 스케일 20~70px
-    const sz = Math.round(20 + Math.log1p(reg.total) / Math.log1p(maxTotal) * 50);
-    const underRatio = reg.total > 0 ? reg.under / reg.total : 0;
-    // 색상: 지하층 비율에 따라 파랑→주황
-    const h = Math.round(220 - underRatio * 160); // 220=파랑, 60=주황
-    const bg = `hsl(${h},70%,45%)`;
-    const label = reg.total > 9999 ? Math.round(reg.total/1000)+'k' : reg.total.toLocaleString();
-    const regionName = reg.key.split(' ').slice(1).join(' ') || reg.key;
-
-    const icon = L.divIcon({
-      html: `<div style="
-        width:${sz}px;height:${sz}px;border-radius:50%;
-        background:${bg};opacity:.82;
-        border:2px solid rgba(255,255,255,.2);
-        box-shadow:0 2px 12px rgba(0,0,0,.4);
-        display:flex;align-items:center;justify-content:center;
-        flex-direction:column;cursor:pointer;">
-        <div style="font-size:${sz>40?11:9}px;font-weight:800;color:#fff;line-height:1">${label}</div>
-        ${sz>36?`<div style="font-size:7px;color:rgba(255,255,255,.7);margin-top:1px">${regionName}</div>`:''}
-      </div>`,
-      iconSize: [sz, sz], iconAnchor: [sz/2, sz/2], className: ''
-    });
-
-    const mk = L.marker([reg.lat, reg.lng], { icon });
-    mk.bindTooltip(`<b>${reg.key}</b><br>승강기 ${reg.total.toLocaleString()}대<br>지하층 포함 ${reg.under.toLocaleString()}대`, { sticky: true });
-    mk.on('click', () => map.setView([reg.lat, reg.lng], 10));
-    layers.cluster.addLayer(mk);
-  });
-}
-
-// 로컬 allPoints로 자체 집계 (Worker summary 실패 시 폴백)
-function buildLocalSummary() {
-  const agg = {};
-  for (const p of allPoints) {
-    const parts = (p.a || '').split(' ');
-    const key = (parts[0] || '') + ' ' + (parts[1] || '');
-    if (!agg[key]) agg[key] = { key, lat: p.lat, lng: p.lng, total: 0, under: 0 };
-    agg[key].total++;
-    if (p.u > 0) agg[key].under++;
-  }
-  return { ts: Date.now(), total: allPoints.length, regions: Object.values(agg) };
-}
-
-// Tier3: bbox 요청 (줌 12+)
-let _bboxDebounce = null;
-async function fetchBbox() {
-  if (bboxPending) return;
-  clearTimeout(_bboxDebounce);
-  _bboxDebounce = setTimeout(async () => {
-    bboxPending = true;
-    const b = map.getBounds();
-    const n = b.getNorth().toFixed(4), s = b.getSouth().toFixed(4);
-    const e = b.getEast().toFixed(4), w = b.getWest().toFixed(4);
-    const key = `${n},${s},${e},${w}`;
-    if (bboxCache[key]) { bboxPending = false; renderTier2(); return; }
-
-    try {
-      const r = await fetch(`${WORKER_URL}/elevators/bbox?n=${n}&s=${s}&e=${e}&w=${w}&limit=2000`);
-      const d = await r.json();
-      const pts = (d.points || []).map(p => ({ n: p.no||'', b:(p.name||'').slice(0,20), a:(p.addr||'').slice(0,30), u:p.under||0, t:0, lat:p.lat, lng:p.lng }));
-      // LRU 5 캐시
-      const keys = Object.keys(bboxCache);
-      if (keys.length >= 5) delete bboxCache[keys[0]];
-      bboxCache[key] = pts;
-      // Supercluster 재빌드
-      buildSupercluster([...allPoints, ...pts]);
-    } catch(e) {}
-    bboxPending = false;
-    renderTier2();
-  }, 300);
-}
-
-// Tier2: 기존 Supercluster 렌더
-function renderTier2() {
+function renderClusters() {
   layers.danger.clearLayers();
   layers.watch.clearLayers();
   layers.safe.clearLayers();
@@ -985,22 +766,6 @@ function renderTier2() {
   });
 }
 
-// ── 통합 renderClusters — 줌레벨에 따라 Tier 분기 ──
-function renderClusters() {
-  const zoom = map.getZoom();
-  if (zoom <= 7) {
-    // Tier 1: 시군구 집계 버블
-    renderTier1();
-  } else if (zoom >= 12) {
-    // Tier 3: bbox 상세 요청 후 Tier2 렌더
-    fetchBbox();
-  } else {
-    // Tier 2: Supercluster
-    renderTier2();
-  }
-}
-
-
 // ── RAIN UI ──
 function renderRain(data) {
   const sorted = [...data].sort((a, b) => b.rain - a.rain);
@@ -1035,13 +800,6 @@ function renderElevList() {
   document.getElementById('st-safe').textContent = safe.toLocaleString();
   document.getElementById('st-watch').textContent = watch.toLocaleString();
   document.getElementById('st-danger').textContent = danger.toLocaleString();
-  // 모바일 핸들 미니 stats 동기화
-  const shTotal = document.getElementById('sh-total');
-  const shDanger = document.getElementById('sh-danger');
-  const shWatch = document.getElementById('sh-watch');
-  if(shTotal) shTotal.textContent = allPoints.length.toLocaleString();
-  if(shDanger) shDanger.textContent = danger;
-  if(shWatch) shWatch.textContent = watch;
   document.getElementById('cnt-danger').textContent = danger;
   document.getElementById('cnt-watch').textContent = watch;
   document.getElementById('cnt-safe').textContent = safe.toLocaleString();
@@ -1154,11 +912,6 @@ async function refresh() {
 
 // ── MAIN ──
 async function init() {
-  // 방어: 최대 20초 후 무조건 loading 숨김
-  const loadingEl = document.getElementById('loading');
-  const forceHide = setTimeout(() => { if(loadingEl) loadingEl.classList.add('hidden'); }, 20000);
-
-  try {
   initMap();
   setProgress(10, '강수 데이터 수신 중...');
   try {
@@ -1186,62 +939,11 @@ async function init() {
   renderElevList();
   renderClusters();
   renderHeatmapLayer();
-  } catch(e) {
-    console.error('init error:', e);
-  } finally {
-  clearTimeout(forceHide);
+
   document.getElementById('loading').classList.add('hidden');
   setStatus('ok', '실시간 연결');
-  }
   setInterval(refresh, 5 * 60 * 1000);
 }
-
-// ===== MOBILE SHEET =====
-let _sheetOpen = false;
-let _touchStartY = 0;
-
-function toggleSheet() {
-  _sheetOpen ? closeSheet() : openSheet();
-}
-function openSheet() {
-  _sheetOpen = true;
-  document.querySelector('.sidebar').classList.add('open');
-  document.getElementById('map-dim').style.opacity = '1';
-}
-function closeSheet() {
-  _sheetOpen = false;
-  document.querySelector('.sidebar').classList.remove('open');
-  document.getElementById('map-dim').style.opacity = '0';
-  setTimeout(() => { document.getElementById('map-dim').style.display = ''; }, 300);
-}
-
-// 터치 스와이프 (위로 올리면 열고, 아래로 내리면 닫기)
-(function setupTouch() {
-  const handle = document.getElementById('sb-handle');
-  if (!handle) return;
-  handle.addEventListener('touchstart', e => { _touchStartY = e.touches[0].clientY; }, {passive:true});
-  handle.addEventListener('touchend', e => {
-    const dy = e.changedTouches[0].clientY - _touchStartY;
-    if (dy < -30) openSheet();
-    else if (dy > 30) closeSheet();
-  }, {passive:true});
-})();
-
-// 모바일 퀵 필터 (지도 위 칩버튼)
-let _quickFilter = 'all';
-function setQuickFilter(f, btn) {
-  _quickFilter = f;
-  document.querySelectorAll('.mc-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  renderClusters();
-}
-
-// renderClusters 호출 시 quickFilter 적용 — 기존 buildSupercluster를 유지하되
-// 퀵필터 상태에 따라 Supercluster.getClusters 결과 후처리
-const _origRenderClusters = window.renderClusters;
-
-// stats 핸들 업데이트
-const _origRenderElevList = window.renderElevList;
 
 init();
 </script>
