@@ -793,7 +793,12 @@ let bboxCache = {};      // Tier3: "n,s,e,w" → 포인트 배열 (LRU 5개)
 let bboxPending = false; // Tier3 중복 요청 방지
 
 function buildSupercluster(points) {
-  sc = new Supercluster({ radius: 60, maxZoom: 16, minZoom: 8 });
+  sc = new Supercluster({
+    radius: 40,      // 60→40: 클러스터 반경 축소, 더 세밀하게
+    maxZoom: 14,     // 16→14: 줌14 이상은 개별 마커
+    minZoom: 8,
+    minPoints: 3,    // 2개짜리 클러스터 제거
+  });
   sc.load(points.map(p => ({
     type: 'Feature',
     properties: { ...p },
