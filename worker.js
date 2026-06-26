@@ -103,14 +103,13 @@ export default {
       try {
         const obj = await env.ELEV_CACHE.get(R2_KEY);
         if (obj) {
-          // gzip → DecompressionStream → 평문 스트림 → CF 엣지가 gzip 재압축
-          const ds = new DecompressionStream('gzip');
-          const decompressed = obj.body.pipeThrough(ds);
-          return new Response(decompressed, {
+          // R2에 Content-Encoding: gzip으로 저장된 파일 → 그대로 통과
+          // 브라우저가 자동 해제 (Worker CPU 소모 0)
+          return new Response(obj.body, {
             headers: {
               ...CORS,
+              'Content-Encoding': 'gzip',
               'Cache-Control': 'public, max-age=1800',
-              'Vary': 'Accept-Encoding',
               'X-Cache': 'HIT',
             },
           });
