@@ -125,7 +125,21 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 .stat-box.watch-box{border-color:rgba(245,158,11,.15)}
 .stat-box.safe-box{border-color:rgba(34,197,94,.15)}
 
-/* rain panel */
+/* forecast */
+.forecast-section{border-bottom:1px solid var(--border);flex-shrink:0}
+.forecast-cities{display:flex;gap:4px;padding:6px 12px 4px;flex-wrap:wrap}
+.fc-city{font-size:.65rem;padding:3px 8px;border-radius:6px;border:1px solid var(--border);
+  color:var(--muted);cursor:pointer;background:transparent;font-family:inherit;transition:.12s}
+.fc-city:hover{border-color:var(--blue);color:var(--blue-light)}
+.fc-city.active{background:rgba(59,130,246,.12);border-color:var(--blue);color:var(--blue-light);font-weight:600}
+.forecast-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px 12px 10px}
+.fc-day{background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:8px;padding:7px 5px;text-align:center}
+.fc-day.today{border-color:rgba(59,130,246,.3);background:rgba(59,130,246,.05)}
+.fc-label{font-size:.58rem;color:var(--muted);font-weight:600;letter-spacing:.04em;margin-bottom:4px}
+.fc-icon{font-size:1.1rem;line-height:1;margin-bottom:3px}
+.fc-temps{font-size:.65rem;font-weight:700;line-height:1.4}
+.fc-hi{color:#ef4444}.fc-lo{color:#60a5fa}
+.fc-pop{font-size:.58rem;color:#06b6d4;margin-top:2px;font-weight:600}
 .rain-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:8px 12px}
 .rain-card{
   background:rgba(255,255,255,.02);border:1px solid var(--border);
@@ -327,7 +341,26 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
     </div>
 
     <div class="sb-section">
-      <div class="sb-hdr">🌧 지역별 강수량</div>
+      <div class="sb-hdr">📅 단기예보 (3일)</div>
+      <div class="forecast-cities" id="fc-cities">
+        <button class="fc-city active" onclick="loadForecast('서울',this)">서울</button>
+        <button class="fc-city" onclick="loadForecast('부산',this)">부산</button>
+        <button class="fc-city" onclick="loadForecast('대구',this)">대구</button>
+        <button class="fc-city" onclick="loadForecast('인천',this)">인천</button>
+        <button class="fc-city" onclick="loadForecast('광주',this)">광주</button>
+        <button class="fc-city" onclick="loadForecast('대전',this)">대전</button>
+        <button class="fc-city" onclick="loadForecast('울산',this)">울산</button>
+        <button class="fc-city" onclick="loadForecast('청주',this)">청주</button>
+        <button class="fc-city" onclick="loadForecast('전주',this)">전주</button>
+        <button class="fc-city" onclick="loadForecast('창원',this)">창원</button>
+        <button class="fc-city" onclick="loadForecast('포항',this)">포항</button>
+      </div>
+      <div class="forecast-grid" id="fc-grid">
+        <div style="grid-column:1/-1;text-align:center;padding:10px;color:var(--muted);font-size:.7rem">로딩 중...</div>
+      </div>
+    </div>
+
+    <div class="sb-section">
       <div class="rain-grid" id="rain-list">
         <div style="grid-column:1/-1;text-align:center;padding:12px;color:var(--muted);font-size:.72rem">로딩 중...</div>
       </div>
@@ -983,12 +1016,13 @@ async function init() {
     renderRain(rainData);
     setProgress(25, '강수 데이터 완료');
   } catch { rainData = []; setProgress(25, '강수 데이터 실패'); }
-  // 기상(기온·풍속·태풍) + 지진 + 예보 병렬 로드
+
+  // 예보 + 기상 + 지진 병렬
   try {
     const [wd] = await Promise.all([
       fetch(`${WORKER_URL}/weather`).then(r => r.json()),
       loadAndRenderQuake(),
-      loadForecast(),
+      loadForecast('서울', null),
     ]);
     weatherData = wd;
     renderTyphoonLayer();
@@ -1051,6 +1085,53 @@ function renderForecast() {
       <div class="fc-days">${days}</div>
     </div>`;
   }).join('');
+}
+
+// ── FORECAST ──
+const FC_ICON = {
+  sky: {1:'☀️',3:'⛅',4:'☁️'},
+  pty: {1:'🌧',2:'🌨',3:'❄️',4:'⛈'},
+};
+function fcIcon(sky, pty) {
+  if (pty > 0) return FC_ICON.pty[pty] || '🌧';
+  return FC_ICON.sky[sky] || '🌤';
+}
+function fcDayLabel(dateStr) {
+  const y=dateStr.slice(0,4), m=dateStr.slice(4,6), d=dateStr.slice(6,8);
+  const dt = new Date(`${y}-${m}-${d}`);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((dt-today)/86400000);
+  const days = ['일','월','화','수','목','금','토'];
+  const dow = days[dt.getDay()];
+  if (diff===0) return {label:'오늘', dow};
+  if (diff===1) return {label:'내일', dow};
+  return {label:`${m}/${d}`, dow};
+}
+async function loadForecast(city, btn) {
+  document.querySelectorAll('.fc-city').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  document.getElementById('fc-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:10px;color:var(--muted);font-size:.7rem">로딩 중...</div>';
+  try {
+    const r = await fetch(`${WORKER_URL}/forecast?city=${encodeURIComponent(city)}&t=${Math.floor(Date.now()/1800000)}`);
+    const d = await r.json();
+    const days = (d.days||[]).slice(0,4);
+    if (!days.length) { document.getElementById('fc-grid').innerHTML='<div style="grid-column:1/-1;text-align:center;padding:10px;color:var(--muted);font-size:.7rem">데이터 없음</div>'; return; }
+    const todayStr = (() => { const t=new Date(Date.now()+9*3600000); return `${t.getUTCFullYear()}${String(t.getUTCMonth()+1).padStart(2,'0')}${String(t.getUTCDate()).padStart(2,'0')}`; })();
+    document.getElementById('fc-grid').innerHTML = days.map(day => {
+      const {label, dow} = fcDayLabel(day.date);
+      const isToday = day.date === todayStr;
+      const icon = fcIcon(day.sky, day.pty);
+      const hi = day.tmx != null ? `<span class="fc-hi">${day.tmx}°</span>` : '—';
+      const lo = day.tmn != null ? `<span class="fc-lo">${day.tmn}°</span>` : '—';
+      const pop = day.pop > 0 ? `<div class="fc-pop">💧${day.pop}%</div>` : '';
+      return `<div class="fc-day${isToday?' today':''}">
+        <div class="fc-label">${label}<br><span style="color:var(--muted);font-weight:400">${dow}</span></div>
+        <div class="fc-icon">${icon}</div>
+        <div class="fc-temps">${hi}<br>${lo}</div>
+        ${pop}
+      </div>`;
+    }).join('');
+  } catch { document.getElementById('fc-grid').innerHTML='<div style="grid-column:1/-1;text-align:center;padding:10px;color:var(--muted);font-size:.7rem">오류</div>'; }
 }
 
 // ── MOBILE SIDEBAR ──
