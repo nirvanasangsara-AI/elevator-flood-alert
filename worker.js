@@ -256,6 +256,67 @@ export default {
       return new Response(JSON.stringify({ ts: Date.now(), total: 0, points: [] }), { headers: CORS });
     }
 
+    // /forecast — 주요 도시 3일 단기예보 (기온 TMX/TMN + 강수확률 POP)
+    if (url.pathname === '/forecast') {
+      const cities = [
+        {name:'서울',nx:60,ny:127},{name:'부산',nx:98,ny:76},{name:'대구',nx:89,ny:90},
+        {name:'인천',nx:55,ny:124},{name:'광주',nx:58,ny:74},{name:'대전',nx:67,ny:100},
+        {name:'울산',nx:102,ny:84},{name:'수원',nx:60,ny:121},{name:'창원',nx:90,ny:77},
+        {name:'전주',nx:63,ny:89},{name:'청주',nx:69,ny:107},{name:'포항',nx:102,ny:94},
+      ];
+      const kst = new Date(Date.now() + 9*3600000);
+      const pad = n => String(n).padStart(2,'0');
+      const bd = `${kst.getUTCFullYear()}${pad(kst.getUTCMonth()+1)}${pad(kst.getUTCDate())}`;
+      // 단기예보 발표 기준시: 02/05/08/11/14/17/20/23시 중 현재 이전 가장 가까운 것
+      const fcHours = [2,5,8,11,14,17,20,23];
+      const nowH = kst.getUTCHours();
+      const fcH = [...fcHours].reverse().find(h => h <= nowH) ?? 23;
+      const fcDate = fcH === 23 && nowH < 23
+        ? (() => { const d = new Date(kst); d.setUTCDate(d.getUTCDate()-1); return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}`; })()
+        : bd;
+      const bt = `${pad(fcH)}00`;
+
+      // 3일치 날짜 배열
+      const days = Array.from({length:3}, (_,i) => {
+        const d = new Date(kst); d.setUTCDate(d.getUTCDate() + i);
+        return `${d.getUTCFullYear()}${pad(d.getUTCMonth()+1)}${pad(d.getUTCDate())}`;
+      });
+
+      const results = await Promise.all(cities.map(async c => {
+        try {
+          const p = new URLSearchParams({
+            serviceKey: env.DATA_GO_KEY, pageNo:1, numOfRows:1000,
+            dataType:'JSON', base_date:fcDate, base_time:bt, nx:c.nx, ny:c.ny
+          });
+          const r = await fetch(`https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?${p}`,
+            {signal: AbortSignal.timeout(8000)});
+          const d = await r.json();
+          const items = d?.response?.body?.items?.item || [];
+          // 날짜별 TMX(최고)/TMN(최저)/POP(강수확률) 수집
+          const byDay = {};
+          days.forEach(dt => { byDay[dt] = {tmx:null,tmn:null,pop:[]}; });
+          items.forEach(it => {
+            if (!byDay[it.fcstDate]) return;
+            if (it.category==='TMX') byDay[it.fcstDate].tmx = parseFloat(it.fcstValue);
+            if (it.category==='TMN') byDay[it.fcstDate].tmn = parseFloat(it.fcstValue);
+            if (it.category==='POP') byDay[it.fcstDate].pop.push(parseInt(it.fcstValue)||0);
+            if (it.category==='SKY' && !byDay[it.fcstDate].sky) byDay[it.fcstDate].sky = parseInt(it.fcstValue);
+            if (it.category==='PTY' && !byDay[it.fcstDate].pty) byDay[it.fcstDate].pty = parseInt(it.fcstValue);
+          });
+          const forecast = days.map(dt => {
+            const v = byDay[dt];
+            const maxPop = v.pop.length ? Math.max(...v.pop) : 0;
+            return { date:dt, tmx:v.tmx, tmn:v.tmn, pop:maxPop, sky:v.sky, pty:v.pty };
+          });
+          return { name:c.name, forecast };
+        } catch { return { name:c.name, forecast:[] }; }
+      }));
+
+      return new Response(JSON.stringify({ ts:Date.now(), days, cities:results }), {
+        headers: { ...CORS, 'Cache-Control':'public, max-age=3600' }
+      });
+    }
+
     return new Response('BTR Flood Alert Worker v3', { headers: {'Content-Type':'text/plain'} });
   },
 };
