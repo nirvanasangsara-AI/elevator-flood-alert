@@ -193,6 +193,51 @@ export default {
       });
     }
 
+    if (url.pathname === '/forecast') {
+      const cityName = url.searchParams.get('city') || '서울';
+      const cities = [{name:'서울',nx:60,ny:127},{name:'부산',nx:98,ny:76},{name:'대구',nx:89,ny:90},{name:'인천',nx:55,ny:124},{name:'광주',nx:58,ny:74},{name:'대전',nx:67,ny:100},{name:'울산',nx:102,ny:84},{name:'수원',nx:60,ny:121},{name:'창원',nx:90,ny:77},{name:'전주',nx:63,ny:89},{name:'청주',nx:69,ny:107},{name:'포항',nx:102,ny:94}];
+      const city = cities.find(c=>c.name===cityName) || cities[0];
+      const kst = new Date(Date.now()+9*3600000);
+      const pad = n=>String(n).padStart(2,'0');
+      const bd = `${kst.getUTCFullYear()}${pad(kst.getUTCMonth()+1)}${pad(kst.getUTCDate())}`;
+      // 가장 최근 단기예보 발표시각 (0200/0500/0800/1100/1400/1700/2000/2300)
+      const hours = [2,5,8,11,14,17,20,23];
+      const h = kst.getUTCHours();
+      const baseH = [...hours].reverse().find(x=>x<=h) ?? 23;
+      const bt = pad(baseH)+'00';
+      // 전날 2300 발표 사용 (당일 이른 시간 대응)
+      const fetchDate = baseH===23 && h<2 ?
+        `${kst.getUTCFullYear()}${pad(kst.getUTCMonth()+1)}${pad(kst.getUTCDate()-1)}` : bd;
+      try {
+        const p = new URLSearchParams({serviceKey:env.DATA_GO_KEY,pageNo:1,numOfRows:1000,dataType:'JSON',base_date:fetchDate,base_time:bt,nx:city.nx,ny:city.ny});
+        const r = await fetch(`https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0/getVilageFcst?${p}`,{signal:AbortSignal.timeout(8000)});
+        const d = await r.json();
+        const items = d?.response?.body?.items?.item||[];
+        // 날짜별로 TMX/TMN/POP/PTY/SKY 집계
+        const byDate = {};
+        items.forEach(it=>{
+          const dt = it.fcstDate;
+          if(!byDate[dt]) byDate[dt]={tmx:null,tmn:null,pop:[],pty:[],sky:[]};
+          if(it.category==='TMX') byDate[dt].tmx=parseFloat(it.fcstValue);
+          if(it.category==='TMN') byDate[dt].tmn=parseFloat(it.fcstValue);
+          if(it.category==='POP') byDate[dt].pop.push(parseInt(it.fcstValue)||0);
+          if(it.category==='PTY') byDate[dt].pty.push(parseInt(it.fcstValue)||0);
+          if(it.category==='SKY') byDate[dt].sky.push(parseInt(it.fcstValue)||0);
+        });
+        const days = Object.keys(byDate).sort().slice(0,4).map(dt=>({
+          date:dt,
+          tmx:byDate[dt].tmx,
+          tmn:byDate[dt].tmn,
+          pop:byDate[dt].pop.length?Math.max(...byDate[dt].pop):0,
+          pty:byDate[dt].pty.some(v=>v>0)?Math.max(...byDate[dt].pty):0,
+          sky:byDate[dt].sky.length?Math.round(byDate[dt].sky.reduce((a,b)=>a+b,0)/byDate[dt].sky.length):1,
+        }));
+        return new Response(JSON.stringify({city:city.name,days}),{headers:{...CORS,'Cache-Control':'public, max-age=1800'}});
+      } catch(e) {
+        return new Response(JSON.stringify({city:city.name,days:[]}),{headers:CORS});
+      }
+    }
+
     if (url.pathname === '/rain') {
       const cities=[{name:'서울',nx:60,ny:127,lat:37.5665,lng:126.9780},{name:'부산',nx:98,ny:76,lat:35.1796,lng:129.0756},{name:'대구',nx:89,ny:90,lat:35.8714,lng:128.6014},{name:'인천',nx:55,ny:124,lat:37.4563,lng:126.7052},{name:'광주',nx:58,ny:74,lat:35.1595,lng:126.8526},{name:'대전',nx:67,ny:100,lat:36.3504,lng:127.3845},{name:'울산',nx:102,ny:84,lat:35.5384,lng:129.3114},{name:'수원',nx:60,ny:121,lat:37.2636,lng:127.0286},{name:'창원',nx:90,ny:77,lat:35.2280,lng:128.6811},{name:'전주',nx:63,ny:89,lat:35.8242,lng:127.1480},{name:'청주',nx:69,ny:107,lat:36.6424,lng:127.4890},{name:'포항',nx:102,ny:94,lat:36.0190,lng:129.3434}];
       const now=new Date(); const kst=new Date(now.getTime()+9*3600000);
