@@ -405,7 +405,7 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
           <div class="layer-dot" style="background:#06b6d4;box-shadow:0 0 4px #06b6d4"></div>
           <span class="layer-name">☁ 위성·레이더</span>
         </div>
-        <label class="toggle"><input type="checkbox" id="lyr-radar" onchange="toggleLayer('radar')"><span class="tslider"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyr-radar" checked onchange="toggleLayer('radar')"><span class="tslider"></span></label>
       </div>
 
       <div class="layer-row">
@@ -413,7 +413,7 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
           <div class="layer-dot" style="background:#f97316;box-shadow:0 0 5px rgba(249,115,22,.5)"></div>
           <span class="layer-name">🌡 기온</span>
         </div>
-        <label class="toggle"><input type="checkbox" id="lyr-temp" onchange="toggleLayer('temp')"><span class="tslider"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyr-temp" checked onchange="toggleLayer('temp')"><span class="tslider"></span></label>
       </div>
 
       <div class="layer-row">
@@ -439,7 +439,7 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
           <span class="layer-name">🌏 지진</span>
           <span class="layer-count" id="cnt-quake">0</span>
         </div>
-        <label class="toggle"><input type="checkbox" id="lyr-quake" onchange="toggleLayer('quake')"><span class="tslider"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyr-quake" checked onchange="toggleLayer('quake')"><span class="tslider"></span></label>
       </div>
 
       <div class="layer-row">
@@ -455,7 +455,7 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
           <div class="layer-dot" style="background:linear-gradient(135deg,#312e81,#3b82f6,#22c55e,#dc2626);border-radius:3px"></div>
           <span class="layer-name">🔥 승강기 밀도</span>
         </div>
-        <label class="toggle"><input type="checkbox" id="lyr-heatmap" onchange="toggleLayer('heatmap')"><span class="tslider"></span></label>
+        <label class="toggle"><input type="checkbox" id="lyr-heatmap" checked onchange="toggleLayer('heatmap')"><span class="tslider"></span></label>
       </div>
 
       <div class="layer-row">
@@ -515,7 +515,7 @@ let map, sc, heatLayer = null, allPoints = [], rainData = [], weatherData = null
 let radarFrames = [], radarIdx = 0, radarTimer = null, radarTiles = [];
 
 // 레이어 상태
-const layerState = { rain:true, radar:false, temp:false, wind:false, typhoon:true, quake:false, heatmap:false, cluster:true, danger:true, watch:true, safe:false, under:false };
+const layerState = { rain:true, radar:true, temp:true, wind:false, typhoon:true, quake:true, heatmap:true, cluster:true, danger:true, watch:true, safe:false, under:false };
 // Leaflet 레이어 그룹
 const layers = {
   rain: L.layerGroup(), radar: L.layerGroup(), temp: L.layerGroup(),
