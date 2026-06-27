@@ -141,7 +141,18 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
 .rc-fill{height:100%;border-radius:1px;transition:.6s}
 .r0 .rc-val{color:var(--muted)} .r1 .rc-val{color:var(--blue-light)} .r2 .rc-val{color:var(--yellow)} .r3 .rc-val{color:var(--red)}
 
-/* elev list */
+/* forecast strip */
+.forecast-strip{padding:8px 12px;border-bottom:1px solid var(--border)}
+.forecast-city{margin-bottom:6px;last-child:margin-bottom:0}
+.fc-name{font-size:.65rem;font-weight:700;color:var(--muted);letter-spacing:.06em;text-transform:uppercase;margin-bottom:4px}
+.fc-days{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.fc-day{background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:7px;padding:5px 6px;text-align:center}
+.fc-date{font-size:.58rem;color:var(--muted);margin-bottom:3px;font-variant-numeric:tabular-nums}
+.fc-icon{font-size:.9rem;line-height:1;margin-bottom:2px}
+.fc-temp{font-size:.68rem;font-weight:700;color:var(--text);letter-spacing:-.01em}
+.fc-tmx{color:#f97316}.fc-tmn{color:#60a5fa}
+.fc-pop{font-size:.6rem;color:#7dd3fc;margin-top:2px}
+.fc-pop.wet{color:#fbbf24}
 .elev-list{flex:1;overflow-y:auto}
 .elev-list::-webkit-scrollbar{width:3px}
 .elev-list::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
@@ -305,6 +316,13 @@ body{font-family:'Inter',-apple-system,'Segoe UI',sans-serif;background:var(--bg
           <div class="sv safe" id="st-safe">—</div>
           <div class="sl">🟢 안전</div>
         </div>
+      </div>
+    </div>
+
+    <div class="sb-section">
+      <div class="sb-hdr">📅 지역별 3일 예보</div>
+      <div class="forecast-strip" id="forecast-strip">
+        <div style="text-align:center;padding:10px;color:var(--muted);font-size:.72rem">로딩 중...</div>
       </div>
     </div>
 
@@ -965,11 +983,12 @@ async function init() {
     renderRain(rainData);
     setProgress(25, '강수 데이터 완료');
   } catch { rainData = []; setProgress(25, '강수 데이터 실패'); }
-
+  // 기상(기온·풍속·태풍) + 지진 + 예보 병렬 로드
   try {
     const [wd] = await Promise.all([
       fetch(`${WORKER_URL}/weather`).then(r => r.json()),
       loadAndRenderQuake(),
+      loadForecast(),
     ]);
     weatherData = wd;
     renderTyphoonLayer();
@@ -989,6 +1008,49 @@ async function init() {
   document.getElementById('loading').classList.add('hidden');
   setStatus('ok', '실시간 연결');
   setInterval(refresh, 5 * 60 * 1000);
+}
+// ── FORECAST ──
+let forecastData = null;
+async function loadForecast() {
+  try {
+    const r = await fetch(`${WORKER_URL}/forecast?t=${Math.floor(Date.now()/3600000)}`);
+    forecastData = await r.json();
+    renderForecast();
+  } catch { document.getElementById('forecast-strip').innerHTML = '<div style="text-align:center;padding:8px;color:var(--muted);font-size:.7rem">예보 로드 실패</div>'; }
+}
+
+function renderForecast() {
+  if (!forecastData?.cities) return;
+  const skyIcon = (sky, pty) => {
+    if (pty >= 1) return pty===2||pty===3?'🌨':'🌧';
+    return sky<=2?'☀️':sky===3?'⛅':'☁';
+  };
+  const fmtDate = dt => {
+    const m = parseInt(dt.slice(4,6)), d = parseInt(dt.slice(6,8));
+    const days = ['일','월','화','수','목','금','토'];
+    const wd = new Date(parseInt(dt.slice(0,4)), m-1, d).getDay();
+    return `${m}/${d}(${days[wd]})`;
+  };
+  const strip = document.getElementById('forecast-strip');
+  strip.innerHTML = forecastData.cities.map(city => {
+    const days = city.forecast.map(f => {
+      const icon = skyIcon(f.sky||1, f.pty||0);
+      const tmx = f.tmx != null ? `<span class="fc-tmx">${f.tmx}°</span>` : '';
+      const tmn = f.tmn != null ? `<span class="fc-tmn">${f.tmn}°</span>` : '';
+      const popCls = f.pop >= 40 ? 'wet' : '';
+      const pop = f.pop != null ? `<div class="fc-pop ${popCls}">💧${f.pop}%</div>` : '';
+      return `<div class="fc-day">
+        <div class="fc-date">${fmtDate(f.date)}</div>
+        <div class="fc-icon">${icon}</div>
+        <div class="fc-temp">${tmx}${tmx&&tmn?'<span style="color:var(--muted)"> / </span>':''}${tmn}</div>
+        ${pop}
+      </div>`;
+    }).join('');
+    return `<div class="forecast-city">
+      <div class="fc-name">${city.name}</div>
+      <div class="fc-days">${days}</div>
+    </div>`;
+  }).join('');
 }
 
 // ── MOBILE SIDEBAR ──
